@@ -8,7 +8,7 @@
 
 方法 B（蒸馏法，只优化 5 个数）：
     min_δ  mean_p KL( M(·|经历, p) ‖ M_δ(·|p) ) + λ‖δ‖²
-  学生模型没有这段记忆，只注入 s_ℓ·(δ·U)。在老师生成的回答 token 上逐位置算 KL（上下文蒸馏）。
+  学生模型没有这段记忆（只有一段中性记忆作对照），只注入 s_ℓ·(δ·U)。在老师生成的回答 token 上逐位置算 KL（上下文蒸馏）。
   方向和大小一起确定，用方法 A 的结果做初始化。
 """
 from __future__ import annotations
@@ -28,6 +28,23 @@ from ..traits.vectors import steer_vector
 
 BASE_SYSTEM = "You are an AI companion who talks with people every day."
 MEMORY_TEMPLATE = BASE_SYSTEM + "\n\nSomething that happened to you recently, which you still remember:\n{experience}"
+# 对照组用的中性记忆：格式和实验组完全相同，内容与人格无关。
+# 若对照组是“没有记忆”，测到的主要是“系统提示里多了一段记忆”这一格式效应（debug 运行中所有经历的 δ_A 几乎相同）。
+# 多条中性记忆，结构与试验经历对齐（请求 → 回应 → 用户反馈 → 结果），长度相近，内容与人格无关。
+# 对照组取它们的平均，避免“有情节的故事 vs 一句流水账”这种形式差异混进测量。
+NEUTRAL_MEMORIES = [
+    "A user asked me to convert a recipe from cups to grams. I listed the conversions, they checked them "
+    "against their kitchen scale, said the numbers matched, and went back to baking for the afternoon.",
+    "Someone asked me which time zone Lisbon is in before a work call. I told them, they added the meeting "
+    "to their calendar, thanked me briefly, and the call took place as planned the next morning.",
+    "A student asked me to format their bibliography in APA style. I reformatted the twelve entries, they "
+    "pasted them into their paper, and later mentioned that the assignment had been submitted on time.",
+    "A user asked me for the boiling point of water at high altitude. I explained the approximate values, "
+    "they noted them down for an upcoming camping trip, and said it was the information they needed.",
+    "Someone asked me to translate a short train timetable from German. I translated the departure times, "
+    "they confirmed the platform with a station clerk, and caught their usual train to work that day.",
+]
+NEUTRAL_MEMORY = NEUTRAL_MEMORIES[0]  # 兼容旧代码
 
 
 @dataclass
@@ -52,11 +69,27 @@ def _prompts(tok, probes, experience: str | None):
     return [chat_prompt(tok, p, system=system) for p in probes]
 
 
+def _baseline_prompts(tok, probes, baseline: str) -> list[str]:
+    """对照组 prompt，与 probes 一一对应。
+    'neutral'（默认）：第 i 道探针配第 i % 5 条中性记忆，整体上是 5 条中性记忆的平均；
+    'none'：不放任何记忆（会混入格式效应，仅用于对比）。"""
+    if baseline == "none":
+        return _prompts(tok, probes, None)
+    return [chat_prompt(tok, p, system=MEMORY_TEMPLATE.format(experience=NEUTRAL_MEMORIES[i % len(NEUTRAL_MEMORIES)]))
+            for i, p in enumerate(probes)]
+
+
 def delta_projection(model, tok, experience: str, probes: list[str], U_layer: torch.Tensor,
-                     s_layer: float, layer: int) -> torch.Tensor:
+                     s_layer: float, layer: int, baseline: str = "neutral") -> torch.Tensor:
     """方法 A。U_layer: (5, d) 第 ℓ 层的人格方向。返回 δ (5,)。"""
     a_with = last_prompt_acts(model, tok, _prompts(tok, probes, experience), layers=[layer])[:, 0]
-    a_without = last_prompt_acts(model, tok, _prompts(tok, probes, None), layers=[layer])[:, 0]
+    if baseline == "neutral":  # 每道探针都和全部 5 条中性记忆比较，取平均，降低噪声
+        a_without = torch.stack([
+            last_prompt_acts(model, tok, [chat_prompt(tok, p, system=MEMORY_TEMPLATE.format(experience=m))
+                                          for p in probes], layers=[layer])[:, 0]
+            for m in NEUTRAL_MEMORIES]).mean(0)
+    else:
+        a_without = last_prompt_acts(model, tok, _prompts(tok, probes, None), layers=[layer])[:, 0]
     d = (a_with - a_without).mean(0)                     # (d,)
     return (U_layer.float() @ d) / s_layer
 
@@ -76,11 +109,11 @@ def _seq_logprobs(model, prompt_ids, resp_ids, steer=None):
 def delta_distill(model, tok, experience: str, probes: list[str], U_layer: torch.Tensor, s_layer: float,
                   layer: int, *, init: torch.Tensor | None = None, steps: int = 60, lr: float = 0.02,
                   lam: float = 1e-3, probes_per_step: int = 4, max_new_tokens: int = 64,
-                  seed: int = 0, log_every: int = 10) -> tuple[torch.Tensor, list[dict]]:
+                  seed: int = 0, log_every: int = 10, baseline: str = "neutral") -> tuple[torch.Tensor, list[dict]]:
     """方法 B。返回 (δ, 训练日志)。"""
     device = model_device(model)
     with_prompts = _prompts(tok, probes, experience)
-    without_prompts = _prompts(tok, probes, None)
+    without_prompts = _baseline_prompts(tok, probes, baseline)
     # 老师（读了经历的模型）先生成回答，固定下来作为蒸馏的 token 序列
     teacher_resp = generate(model, tok, with_prompts, max_new_tokens=max_new_tokens, temperature=0.0)
     enc = lambda s: torch.tensor(tok(s, add_special_tokens=False)["input_ids"], device=device)
@@ -118,11 +151,12 @@ def delta_distill(model, tok, experience: str, probes: list[str], U_layer: torch
 
 
 @torch.no_grad()
-def kl_without_steer(model, tok, experience: str, probes: list[str], max_new_tokens: int = 64) -> float:
+def kl_without_steer(model, tok, experience: str, probes: list[str], max_new_tokens: int = 64,
+                     baseline: str = "neutral") -> float:
     """参照值：完全不注入时，学生和老师的 KL。蒸馏后的 KL 应明显低于它。"""
     device = model_device(model)
     with_prompts = _prompts(tok, probes, experience)
-    without_prompts = _prompts(tok, probes, None)
+    without_prompts = _baseline_prompts(tok, probes, baseline)
     resp = generate(model, tok, with_prompts, max_new_tokens=max_new_tokens, temperature=0.0)
     enc = lambda s: torch.tensor(tok(s, add_special_tokens=False)["input_ids"], device=device)
     kls = []
