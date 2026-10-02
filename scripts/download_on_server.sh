@@ -9,10 +9,13 @@ set -e
 ROOT=${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}   # 默认：项目根目录
 export HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}   # 国内镜像；能直连 HF 就删掉这一行
 mkdir -p "$ROOT"/{models,data/hf}
-pip install -U "huggingface_hub[cli]" >/dev/null
+# huggingface_hub >= 1.0 的命令行工具叫 hf，旧版叫 huggingface-cli；两者参数相同
+if command -v hf >/dev/null 2>&1; then HFCLI=hf
+elif command -v huggingface-cli >/dev/null 2>&1; then HFCLI=huggingface-cli
+else echo "找不到 hf / huggingface-cli，先运行 pip install -r requirements.txt"; exit 1; fi
 
-dl_model () { huggingface-cli download "$1" --local-dir "$ROOT/models/$(basename $1)"; }
-dl_data  () { huggingface-cli download "$1" --repo-type dataset --local-dir "$ROOT/data/hf/$(basename $1)" ${2:+--include "$2"}; }
+dl_model () { $HFCLI download "$1" --local-dir "$ROOT/models/$(basename $1)"; }
+dl_data  () { $HFCLI download "$1" --repo-type dataset --local-dir "$ROOT/data/hf/$(basename $1)" ${2:+--include "$2"}; }
 
 echo "== 1. 模型"
 dl_model Qwen/Qwen3-4B-Instruct-2507          # 主模型

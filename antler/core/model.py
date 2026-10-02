@@ -15,7 +15,10 @@ def load_model(name_or_path: str, dtype: str = "bfloat16", device: str = "auto")
     torch_dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[dtype]
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModelForCausalLM.from_pretrained(name_or_path, torch_dtype=torch_dtype)
+    try:  # transformers >= 4.56 / 5.x 用 dtype；旧版本用 torch_dtype
+        model = AutoModelForCausalLM.from_pretrained(name_or_path, dtype=torch_dtype)
+    except TypeError:
+        model = AutoModelForCausalLM.from_pretrained(name_or_path, torch_dtype=torch_dtype)
     model.to(device).eval()
     freeze(model)
     return model, tok

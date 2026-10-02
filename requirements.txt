@@ -8,4 +8,4 @@ pyarrow                # parquet files (UltraChat, TRAIT)
 requests
 tqdm
 pytest
-huggingface_hub[cli]
+huggingface_hub        # provides the `hf` download CLI
