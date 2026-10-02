@@ -8,30 +8,119 @@
 同时要求生成模式下连贯性 ≥ 阈值。
 """
 import csv
+import hashlib
+import json
+import math
 import random
+import subprocess
+import sys
+from contextlib import contextmanager, nullcontext
+from datetime import datetime, timezone
 
 import torch
+import transformers
 
 from _common import parse_args, setup
-from antler.config import sweep_layers
+from antler.config import ROOT, sweep_layers
 from antler.core.model import n_layers
 from antler.eval.trait_score import mcq_high_prob, trait_score
-from antler.traits.data import DIM_NAMES, DIMS, load_jsonl
+from antler.traits.data import BIG_FIVE, DIM_NAMES, DIMS, KIT, load_jsonl
 from antler.traits.vectors import load_directions, steer_vector
 
 
+def add_arguments(ap):
+    ap.add_argument("--mode", choices=["judge", "mcq"], default="judge")
+    ap.add_argument("--dims", nargs="*", default=DIMS)
+    ap.add_argument("--mcq-per-dim", type=int, default=100)
+    ap.add_argument("--min-coherence", type=float, default=75)
+    ap.add_argument("--layers", nargs="+", type=int, help="覆盖配置中的扫描层号（从 0 开始）")
+    ap.add_argument("--coefs", nargs="+", type=float, help="覆盖配置中的扫描系数")
+    ap.add_argument("--n-samples", type=int, default=1, help="生成式测量每题采样次数，默认 1")
+    ap.add_argument("--save-samples", action="store_true", help="逐点保存生成回答和评分（仅 judge 模式）")
+    ap.add_argument("--reuse-baseline", action="store_true", help="同一次运行内，每个维度的零注入只测一次")
+
+
+def scan_settings(args, cfg, count):
+    """命令行优先；未提供新选项时保留原有配置和测量方式。"""
+    layers = args.layers if args.layers is not None else sweep_layers(cfg, count)
+    coefs = args.coefs if args.coefs is not None else cfg.get("coefs", [-0.2, -0.1, 0.0, 0.1, 0.2])
+    if not layers or any(l < 0 or l >= count for l in layers) or len(set(layers)) != len(layers):
+        raise ValueError(f"扫描层号必须唯一且位于 0–{count - 1}")
+    if not coefs or any(not math.isfinite(c) for c in coefs) or len(set(coefs)) != len(coefs):
+        raise ValueError("扫描系数必须非空、有限且不重复")
+    if not args.dims or any(k not in DIMS for k in args.dims) or len(set(args.dims)) != len(args.dims):
+        raise ValueError("扫描维度必须是 O/C/E/A/N 中不重复的维度")
+    if args.n_samples < 1:
+        raise ValueError("每题采样次数必须大于 0")
+    if args.mode == "mcq" and (args.save_samples or args.n_samples != 1):
+        raise ValueError("--save-samples 和多次采样仅适用于 judge 模式")
+    return layers, coefs
+
+
+def _redacted(value):
+    """元数据保留配置，但不写入认证凭据。"""
+    private = {"api_key", "judge_api_key", "hf_token", "token", "access_token", "password", "secret", "authorization"}
+    if isinstance(value, dict):
+        return {k: ("[已隐藏]" if k.lower() in private else _redacted(v)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_redacted(v) for v in value]
+    return value
+
+
+@contextmanager
+def record_run(args, cfg, judge, layers, coefs):
+    """开启逐题保存时，同时记录本次精测的来源和结束状态。"""
+    if not args.save_samples:
+        yield
+        return
+
+    def git(*argv):
+        try:
+            return subprocess.check_output(["git", *argv], cwd=ROOT, text=True, encoding="utf-8",
+                                           stderr=subprocess.DEVNULL, timeout=5).strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    now = lambda: datetime.now(timezone.utc).isoformat()
+    state = git("status", "--porcelain")
+    files = [KIT / "trait_eval" / f"{BIG_FIVE[k][0]}.json" for k in args.dims]
+    files += [cfg["out_path"] / "directions.pt"]
+    meta = {"git_commit": git("rev-parse", "HEAD"), "git_dirty": bool(state) if state is not None else None,
+            "config_path": args.config, "config": _redacted({k: v for k, v in cfg.items() if k != "out_path"}),
+            "argv": sys.argv[1:], "start_time": now(), "end_time": None, "status": "running",
+            "torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.version.cuda,
+            "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+            "judge": _redacted({k: getattr(judge, k, None) for k in ("model", "base_url", "max_tokens", "extra_body")}),
+            "seed": 0, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
+            "dims": args.dims, "reuse_baseline": args.reuse_baseline,
+            "data_hashes": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.exists()}}
+    path = cfg["out_path"] / "run_meta.json"
+
+    def save():
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2, default=str)
+
+    save()
+    try:
+        yield
+    except BaseException:
+        meta["status"] = "failed"
+        raise
+    else:
+        meta["status"] = "completed"
+    finally:
+        meta["end_time"] = now()
+        save()
+
+
 def main():
-    def extra(ap):
-        ap.add_argument("--mode", choices=["judge", "mcq"], default="judge")
-        ap.add_argument("--dims", nargs="*", default=DIMS)
-        ap.add_argument("--mcq-per-dim", type=int, default=100)
-        ap.add_argument("--min-coherence", type=float, default=75)
-    args = parse_args(extra)
+    args = parse_args(add_arguments)
     cfg, model, tok, judge = setup(args, need_judge=(args.mode == "judge"))
+    layers, coefs = scan_settings(args, cfg, n_layers(model))
+    if args.mode == "judge" and judge is None:
+        raise ValueError("judge 模式需要启用评委，请检查 use_judge 和评委环境变量")
     D = load_directions(cfg["out_path"] / "directions.pt")
     U, s = D["U"], D["s"]
-    layers = sweep_layers(cfg, n_layers(model))
-    coefs = cfg.get("coefs", [-0.2, -0.1, 0.0, 0.1, 0.2])
     print(f"[扫描] 层 {layers}，系数 {coefs}，维度 {args.dims}，模式 {args.mode}")
 
     mcq_items = {}
@@ -44,8 +133,12 @@ def main():
             mcq_items[k] = items[:args.mcq_per_dim]
 
     out_csv = cfg["out_path"] / f"calibration_{args.mode}.csv"
+    samples_path = cfg["out_path"] / f"calibration_{args.mode}_samples.jsonl"
+    # 基线缓存仅在本次运行中有效，不会跨配置复用旧结果。
+    baselines = {}
     results = []
-    with open(out_csv, "w", newline="", encoding="utf-8") as f:
+    sample_file = open(samples_path, "w", encoding="utf-8", newline="\n") if args.save_samples else nullcontext(None)
+    with record_run(args, cfg, judge, layers, coefs), sample_file as sf, open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["layer", "dim", "coef", "trait", "coherence"])
         for l in layers:
@@ -55,13 +148,29 @@ def main():
                     z = torch.zeros(len(DIMS))
                     z[ki] = c
                     steer = None if c == 0 else {l: steer_vector(U[l], float(s[l]), z)}
-                    if args.mode == "judge":
+                    reused = args.reuse_baseline and c == 0 and k in baselines
+                    if reused:
+                        r, source_layer = baselines[k]
+                        trait, coh = r["trait"], r.get("coherence")
+                    elif args.mode == "judge":
                         r = trait_score(model, tok, judge, k, steer=steer, n_questions=cfg.get("calib_questions", 10),
-                                        max_new_tokens=cfg.get("max_new_tokens", 200))
+                                        max_new_tokens=cfg.get("max_new_tokens", 200), n_samples=args.n_samples)
                         trait, coh = r["trait"], r.get("coherence")
                     else:
                         probs = mcq_high_prob(model, tok, mcq_items[k], steer=steer)
                         trait, coh = 100 * sum(probs) / len(probs), None
+                        r = {"trait": trait, "coherence": coh}
+                    if not reused:
+                        source_layer = l
+                        if args.reuse_baseline and c == 0:
+                            baselines[k] = (r, l)
+                    if sf is not None:
+                        # 复用的基线仍写完整记录，并标明来源，不能当作独立重复样本。
+                        record = {"layer": l, "dim": k, "coef": c, "n_samples": args.n_samples,
+                                  "baseline_reused": reused, "source_layer": source_layer,
+                                  "result": r}
+                        sf.write(json.dumps(record, ensure_ascii=False) + "\n")
+                        sf.flush()
                     w.writerow([l, k, c, trait, coh])
                     f.flush()
                     results.append((l, k, c, trait, coh))
@@ -84,6 +193,8 @@ def main():
                 best = (l, eff)
         print(f"  {k}: " + (f"layer {best[0]}，效果 {best[1]:.1f}" if best else "没有满足连贯性要求的层，缩小系数后重试"))
     print(f"\n完整结果：{out_csv}")
+    if args.save_samples:
+        print(f"逐点回答与评分：{samples_path}")
 
 
 if __name__ == "__main__":

@@ -81,6 +81,23 @@ python experiments/e0_calibrate.py --mode judge      # 再在候选层上用评�
 
 **通过标准**：5 个维度都能随系数单调变化，且连贯性不明显下降。
 
+#### C2：保留逐题回答的精测
+
+粗扫选出候选层之后，可以显式开启逐题保存和零注入基线复用：
+
+```bash
+python experiments/e0_calibrate.py --mode judge --config configs/main.yaml \
+  --layers 15 16 17 --coefs -0.6 -0.4 -0.2 0 0.2 0.4 0.6 \
+  --n-samples 1 --save-samples --reuse-baseline
+```
+
+- `--layers`、`--coefs` 覆盖本次运行的配置，不修改 YAML。层号从 0 开始。
+- `--n-samples` 是每题采样次数，默认仍为 1；多次采样仅用于 judge 模式。
+- `--save-samples` 在输出目录写入 `calibration_judge_samples.jsonl`，每行对应一个扫描点，包含层、维度、系数、逐题回答、特质评分和该点平均连贯性。同时写入 `run_meta.json`，记录配置、实际扫描参数、模型软件版本、评委设置、数据哈希和运行状态。
+- `--reuse-baseline` 只在本次运行内复用同维度的零注入结果；逐题记录中的 `baseline_reused` 和 `source_layer` 标明复用关系。复用记录不能计为独立重复样本。
+- 两个开关默认关闭；原有 CSV 路径、列和旧命令行为保持兼容。运行前备份同名 CSV、逐题文件和 `run_meta.json`，因为本次运行会覆盖它们。
+- 示例包含 ±0.6 的边界检查点，不表示这些系数已通过连贯性验证。当前前 10 道评测题仅用于校准。
+
 ### E1：单段经历能否写成向量（第 2 周）
 
 ```bash
