@@ -66,6 +66,15 @@ class Judge:
             raise RuntimeError("请设置 JUDGE_BASE_URL / JUDGE_API_KEY / JUDGE_MODEL 环境变量（见 .env.example）")
         self.max_workers = max_workers
         self.max_tokens = int(os.environ.get("JUDGE_MAX_TOKENS", "16"))
+        # 额外请求参数（JSON）。评委必须关闭“思考”，否则 max_tokens 被思考过程用完、content 为空。
+        # DeepSeek 默认开启思考，这里自动关闭；其他厂商可用 JUDGE_EXTRA_BODY 自行设置。
+        extra = os.environ.get("JUDGE_EXTRA_BODY", "").strip()
+        if extra:
+            self.extra_body = json.loads(extra)
+        elif "deepseek.com" in self.base_url:
+            self.extra_body = {"thinking": {"type": "disabled"}}
+        else:
+            self.extra_body = {}
         self._n_bad = 0
         self.cache_path = Path(cache_path)
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,7 +98,7 @@ class Judge:
                 r = requests.post(f"{self.base_url}/chat/completions",
                                   headers={"Authorization": f"Bearer {self.api_key}"},
                                   json={"model": self.model, "temperature": 0, "max_tokens": self.max_tokens,
-                                        "messages": [{"role": "user", "content": prompt}]},
+                                        "messages": [{"role": "user", "content": prompt}], **self.extra_body},
                                   timeout=60)
                 r.raise_for_status()
                 out = r.json()["choices"][0]["message"].get("content") or ""
@@ -98,7 +107,10 @@ class Judge:
                     with self._lock:
                         self._n_bad += 1
                         if self._n_bad <= 3:
-                            print(f"[评委] 无法解析的输出：{out!r}（模型 {self.model}，max_tokens={self.max_tokens}）")
+                            msg = r.json()["choices"][0]["message"]
+                            think = (msg.get("reasoning_content") or "")[:80]
+                            print(f"[评委] 无法解析的输出：{out!r}（模型 {self.model}，max_tokens={self.max_tokens}，"
+                                  f"extra={self.extra_body}，思考内容开头={think!r}）")
                     return out
                 with self._lock:
                     self._cache[key] = out
