@@ -1,10 +1,10 @@
 torch>=2.3
-transformers>=4.51     # Qwen3 需要较新的版本
+transformers>=4.51     # Qwen3 needs a recent version
 accelerate
 pyyaml
 numpy
 pandas
-pyarrow                # 读 parquet（UltraChat、TRAIT）
+pyarrow                # parquet files (UltraChat, TRAIT)
 requests
 tqdm
 pytest
