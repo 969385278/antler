@@ -1,0 +1,6 @@
+# Keep LF line endings everywhere: the code runs on a Linux server
+* text=auto eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.pt binary
+*.parquet binary

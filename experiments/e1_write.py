@@ -43,7 +43,9 @@ def main():
             kl0 = kl_without_steer(model, tok, ep["text"], probes)
             dB, log = delta_distill(model, tok, ep["text"], probes, U_l, s_l, args.layer, init=dA)
             hitsB += sign_agreement(dB, ep["intended"])[0]
-            row.update({"delta_B": dB.tolist(), "kl_no_steer": kl0, "kl_final": log[-1]["kl"], "log": log})
+            explained = (kl0 - log[-1]["kl"]) / kl0 if kl0 > 0 else None  # 人格解释率
+            row.update({"delta_B": dB.tolist(), "kl_no_steer": kl0, "kl_final": log[-1]["kl"],
+                        "explained": explained, "log": log})
         if args.behavior:
             from antler.eval.trait_score import trait_score
             from antler.memory.write import BASE_SYSTEM, MEMORY_TEMPLATE
@@ -62,11 +64,14 @@ def main():
         report.append(row)
         fmt = lambda d: " ".join(f"{k}={x:+.3f}" for k, x in zip(DIMS, d))
         print(f"[{ep['id']}] 预期 {ep['intended']}\n    δ_A: {fmt(row['delta_A'])}"
-              + (f"\n    δ_B: {fmt(row['delta_B'])}  KL {row['kl_no_steer']:.4f} → {row['kl_final']:.4f}" if args.distill else ""))
+              + (f"\n    δ_B: {fmt(row['delta_B'])}  KL {row['kl_no_steer']:.4f} → {row['kl_final']:.4f}"
+               f"  人格解释率 {100 * row['explained']:.1f}%" if args.distill else ""))
 
     summary = {"layer": args.layer, "sign_acc_A": hitsA / tot}
     if args.distill:
         summary["sign_acc_B"] = hitsB / tot
+        ex = [r["explained"] for r in report if r.get("explained") is not None]
+        summary["explained_mean"] = sum(ex) / len(ex) if ex else None
     print("\n方向准确率：", summary)
     dump({"summary": summary, "episodes": report}, cfg["out_path"] / f"e1_layer{args.layer}.json")
 

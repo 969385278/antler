@@ -26,9 +26,9 @@ dl_data HuggingFaceH4/ultrachat_200k "data/test_sft-*"
 
 echo "== 4. TRAIT（需要先在网页上同意条件，并设置 HF_TOKEN）"
 if [ -z "$HF_TOKEN" ]; then
-  echo "  跳过：没有设置 HF_TOKEN。去 https://huggingface.co/datasets/mirlab/TRAIT 同意条件后再运行"
+  echo "  跳过：没有设置 HF_TOKEN。去 https://huggingface.co/datasets/snupilab/TRAIT 同意条件后再运行"
 else
-  dl_data mirlab/TRAIT || dl_data snupilab/TRAIT
+  dl_data snupilab/TRAIT
 fi
 
 if [ -d "$ROOT/data/hf/TRAIT" ]; then
