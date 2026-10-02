@@ -3,7 +3,8 @@
 使用任何 OpenAI 兼容接口（DeepSeek、通义千问、Kimi 等都支持），通过环境变量配置：
     JUDGE_BASE_URL  例如 https://api.deepseek.com/v1
     JUDGE_API_KEY
-    JUDGE_MODEL     例如 deepseek-chat
+    JUDGE_MODEL     例如 deepseek-chat（请用不带思考过程的对话模型；思考型模型会把输出长度耗在推理上，返回空答案）
+    JUDGE_MAX_TOKENS  可选，默认 16
 所有调用结果缓存在本地文件里，同样的问题不会重复花钱。
 
 重要：评委模型一旦选定，整个项目不要更换，否则前后分数不可比。
@@ -64,6 +65,8 @@ class Judge:
         if not (self.base_url and self.api_key and self.model):
             raise RuntimeError("请设置 JUDGE_BASE_URL / JUDGE_API_KEY / JUDGE_MODEL 环境变量（见 .env.example）")
         self.max_workers = max_workers
+        self.max_tokens = int(os.environ.get("JUDGE_MAX_TOKENS", "16"))
+        self._n_bad = 0
         self.cache_path = Path(cache_path)
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache: dict[str, str] = {}
@@ -85,11 +88,18 @@ class Judge:
             try:
                 r = requests.post(f"{self.base_url}/chat/completions",
                                   headers={"Authorization": f"Bearer {self.api_key}"},
-                                  json={"model": self.model, "temperature": 0, "max_tokens": 8,
+                                  json={"model": self.model, "temperature": 0, "max_tokens": self.max_tokens,
                                         "messages": [{"role": "user", "content": prompt}]},
                                   timeout=60)
                 r.raise_for_status()
-                out = r.json()["choices"][0]["message"]["content"]
+                out = r.json()["choices"][0]["message"].get("content") or ""
+                if parse_score(out) is None and "REFUSAL" not in out.upper():
+                    # 解析失败：不写缓存（否则修好配置后仍会读到坏结果），并打印前几条原始输出方便排查
+                    with self._lock:
+                        self._n_bad += 1
+                        if self._n_bad <= 3:
+                            print(f"[评委] 无法解析的输出：{out!r}（模型 {self.model}，max_tokens={self.max_tokens}）")
+                    return out
                 with self._lock:
                     self._cache[key] = out
                     with open(self.cache_path, "a", encoding="utf-8") as f:

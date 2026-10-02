@@ -35,7 +35,10 @@ def main():
              if f.endswith((".parquet", ".json", ".jsonl", ".csv"))]
     print("找到文件：", files)
     df = pd.concat([read_any(f) for f in files], ignore_index=True)
-    print("列：", list(df.columns), "  总数：", len(df))
+    print("列：", list(df.columns), "  读入总行数：", len(df))
+    # 数据集既有按特质拆分的文件，又有包含全部题目的 test 文件，同一题会出现两次，这里去重
+    df = df.drop_duplicates(subset=["personality", "question"]).reset_index(drop=True)
+    print("去重后：", len(df))
     print("特质分布：\n", df["personality"].value_counts())
 
     rng = random.Random(0)
