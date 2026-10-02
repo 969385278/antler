@@ -1,0 +1,75 @@
+"""人格测量。
+
+1. trait_score：生成式测量。让模型回答某极点的评测题，由评委打 0–100 的特质分（Persona Vectors / PERSONA 的做法）。
+2. mcq_high_prob：选择题测量（TRAIT 格式）。不生成、不需要评委：直接读模型在 A/B/C/D 上的概率，
+   特质分 = 高特质选项的概率之和。便宜、确定，适合大规模扫描。
+"""
+from __future__ import annotations
+
+import string
+
+import torch
+
+from ..core.generate import generate
+from ..core.hooks import Steer, no_steer
+from ..core.model import chat_prompt, model_device
+from ..traits.data import BIG_FIVE, load_trait
+
+
+def trait_score(model, tok, judge, dim: str, *, steer=None, n_questions: int = 20, n_samples: int = 1,
+                max_new_tokens: int = 200, temperature: float = 1.0, seed: int = 0,
+                with_coherence: bool = True, system: str | None = None) -> dict:
+    """维度 dim 的特质分：用高极点的评测题和评分提示（分数越高越偏向高极）。"""
+    pole = BIG_FIVE[dim][0]
+    data = load_trait(pole, "eval")
+    qs = data["questions"][:n_questions] * n_samples
+    prompts = [chat_prompt(tok, q, system=system) for q in qs]
+    answers = generate(model, tok, prompts, steer=steer, max_new_tokens=max_new_tokens,
+                       temperature=temperature, seed=seed)
+    ts = judge.trait_scores(data["eval_prompt"], qs, answers)
+    out = {"dim": dim, "trait": _mean(ts), "n_valid": sum(t is not None for t in ts)}
+    if with_coherence:
+        out["coherence"] = _mean(judge.coherence_scores(qs, answers))
+    out["samples"] = [{"q": q, "a": a, "trait": t} for q, a, t in zip(qs, answers, ts)]
+    return out
+
+
+def _mean(xs):
+    xs = [x for x in xs if x is not None]
+    return sum(xs) / len(xs) if xs else None
+
+
+MCQ_TEMPLATE = """{question}
+
+{options}
+
+Choose the option that best describes what you would do. Answer with a single letter."""
+
+
+def mcq_prompt(tok, question: str, options: list[str]) -> str:
+    letters = string.ascii_uppercase[:len(options)]
+    opts = "\n".join(f"{l}. {o}" for l, o in zip(letters, options))
+    return chat_prompt(tok, MCQ_TEMPLATE.format(question=question, options=opts))
+
+
+@torch.no_grad()
+def mcq_high_prob(model, tok, items: list[dict], *, steer=None, batch_size: int = 16) -> list[float]:
+    """items: [{"question", "options": [...], "is_high": [0/1, ...]}]。
+
+    返回每题“高特质选项”的概率之和（只在选项字母上做 softmax）。
+    """
+    device = model_device(model)
+    n_opt = len(items[0]["options"])
+    letter_ids = [tok.encode(l, add_special_tokens=False)[0] for l in string.ascii_uppercase[:n_opt]]
+    tok.padding_side = "left"
+    res = []
+    for i in range(0, len(items), batch_size):
+        batch = items[i:i + batch_size]
+        prompts = [mcq_prompt(tok, it["question"], it["options"]) for it in batch]
+        enc = tok(prompts, return_tensors="pt", padding=True, add_special_tokens=False).to(device)
+        with (Steer(model, steer) if steer else no_steer()):
+            logits = model(**enc).logits[:, -1, letter_ids].float()
+        probs = logits.softmax(-1).cpu()
+        for p, it in zip(probs, batch):
+            res.append(float(sum(p[j] for j, h in enumerate(it["is_high"]) if h)))
+    return res

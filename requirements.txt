@@ -1,0 +1,11 @@
+torch>=2.3
+transformers>=4.51     # Qwen3 需要较新的版本
+accelerate
+pyyaml
+numpy
+pandas
+pyarrow                # 读 parquet（UltraChat、TRAIT）
+requests
+tqdm
+pytest
+huggingface_hub[cli]

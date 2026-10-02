@@ -1,0 +1,13 @@
+# 大文件：模型和下载的数据集不进 Git
+models/
+data/hf/
+data/trait_big5_mcq.jsonl
+outputs/
+# 密钥
+.env
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/

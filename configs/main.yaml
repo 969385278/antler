@@ -1,0 +1,20 @@
+# 正式实验：Qwen3-4B-Instruct-2507，单张 24G 显卡
+model: models/Qwen3-4B-Instruct-2507   # download_on_server.sh 下载到这里；也可以直接写 HF 名称 Qwen/Qwen3-4B-Instruct-2507
+dtype: bfloat16
+device: auto
+out_dir: outputs/main
+
+# E0 提取
+n_rollouts: 2          # 每个（系统提示, 问题）生成几条回答；5 对提示 × 20 题 × 2 × 正负 = 400 条/极点
+max_new_tokens: 200
+batch_size: 16
+use_judge: true        # 用评委过滤提取样本（Persona Vectors 的做法）
+
+# E0 校准：层位扫描
+layer_frac: [0.3, 0.6] # 扫描模型深度 30%–60% 的层
+layer_step: 2
+coefs: [-0.2, -0.1, 0.0, 0.1, 0.2]   # 单位：该层激活平均范数 s_ℓ 的比例；跑完 e0_extract 后按提示调整
+calib_questions: 10
+
+# E1 写入
+probe_n: 30

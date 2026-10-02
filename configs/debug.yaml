@@ -1,0 +1,17 @@
+# 本地调试：小模型 + CPU，只为验证代码能跑通，结果没有意义
+model: Qwen/Qwen2.5-0.5B-Instruct
+dtype: float32
+device: cpu
+out_dir: outputs/debug
+
+n_rollouts: 1
+max_new_tokens: 32
+batch_size: 4
+use_judge: false       # 不调用评委，不花钱
+max_questions: 2       # 每个极点只用 2 道题
+
+layers: [8, 12]
+coefs: [-0.1, 0.0, 0.1]
+calib_questions: 2
+
+probe_n: 4
