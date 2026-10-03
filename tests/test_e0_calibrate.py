@@ -206,19 +206,21 @@ def test_task_scoring_cli_csv_and_metadata(calibration, model, monkeypatch, tmp_
                              "n_generated_tokens": 320, "finish_reason": "length"}]}
 
     monkeypatch.setattr(calibration, "trait_score", measure)
-    argv = ["e0_calibrate.py", "--dims", "C", "--pole", "low", "--reuse-baseline", "--with-task",
+    argv = ["e0_calibrate.py", "--dims", "C", "--pole", "low", "--reuse-baseline", "--with-task", "--seed", "17",
             "--max-new-tokens", "320"]
     if save_samples:
         argv.append("--save-samples")
     monkeypatch.setattr(sys, "argv", argv)
     calibration.main()
     assert len(calls) == 1 and calls[0]["with_task"] is True and calls[0]["max_new_tokens"] == 320
+    assert calls[0]["seed"] == 17
     assert cfg["max_new_tokens"] == 200
     rows = list(csv.DictReader((tmp_path / "calibration_judge.csv").open(encoding="utf-8")))
     assert list(rows[0]) == ["layer", "dim", "coef", "trait", "coherence", "pole", "task"]
     assert [r["task"] for r in rows] == ["90", "90"]
     meta = json.loads((tmp_path / "run_meta.json").read_text(encoding="utf-8"))
     assert meta["max_new_tokens"] == 320 and meta["with_task"] is True and meta["status"] == "completed"
+    assert meta["seed"] == 17
     assert meta["task_score_validation"] == "unvalidated" and meta["task_score_use"] == "exploratory"
     assert set(meta["prompt_hashes"]) == {"COHERENCE_PROMPT", "TASK_PROMPT"}
     if save_samples:

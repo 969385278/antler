@@ -43,6 +43,7 @@ def add_arguments(ap):
     ap.add_argument("--layers", nargs="+", type=int, help="覆盖配置中的扫描层号（从 0 开始）")
     ap.add_argument("--coefs", nargs="+", type=float, help="覆盖配置中的扫描系数")
     ap.add_argument("--n-samples", type=int, default=1, help="生成式测量每题采样次数，默认 1")
+    ap.add_argument("--seed", type=int, default=0, help="生成随机种子；默认0保持旧结果，独立种子应分别留档")
     ap.add_argument("--save-samples", action="store_true", help="逐点保存生成回答和评分（仅 judge 模式）")
     ap.add_argument("--reuse-baseline", action="store_true", help="同一次运行内，每个维度的零注入只测一次")
     ap.add_argument("--with-task", action="store_true", help="补打任务理解分（探索性评分，尚待作者盲标验证）")
@@ -124,7 +125,7 @@ def record_run(args, cfg, judge, layers, coefs):
             "torch": torch.__version__, "transformers": transformers.__version__, "cuda": torch.version.cuda,
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             "judge": _redacted({k: getattr(judge, k, None) for k in ("model", "base_url", "max_tokens", "extra_body")}),
-            "seed": 0, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
+            "seed": args.seed, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
             "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args), "axis": args.axis, "split": args.split,
             "max_new_tokens": generation_limit(args, cfg) if args.mode == "judge" else None,
             "with_task": args.with_task,
@@ -221,7 +222,7 @@ def main():
                             r, source_layer = baselines[baseline_key]
                             trait, coh = r["trait"], r.get("coherence")
                         elif args.mode == "judge":
-                            r = trait_score(model, tok, judge, k, steer=steer, pole=pole, split=args.split,
+                            r = trait_score(model, tok, judge, k, steer=steer, pole=pole, split=args.split, seed=args.seed,
                                             n_questions=cfg.get("calib_questions", 10),
                                             max_new_tokens=generation_limit(args, cfg), n_samples=args.n_samples,
                                             with_task=args.with_task)
@@ -238,7 +239,7 @@ def main():
                             # 复用的基线仍写完整记录，并标明来源，不能当作独立重复样本。
                             record = {"layer": l, "dim": k, "coef": c, "pole": pole, "axis": args.axis, "split": args.split,
                                       "trait_name": BIG_FIVE[k][0 if pole == "high" else 1],
-                                      "n_samples": args.n_samples, "baseline_reused": reused,
+                                      "n_samples": args.n_samples, "seed": args.seed, "baseline_reused": reused,
                                       "max_new_tokens": generation_limit(args, cfg), "with_task": args.with_task,
                                       "source_layer": source_layer, "result": r}
                             sf.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -247,7 +248,7 @@ def main():
                         f.flush()
                         results.append((l, k, c, trait, coh, pole))
                         task_log = f" task={r.get('task')}" if args.with_task else ""
-                        print(f"  layer {l:2d} {k} {pole} coef {c:+.2f}: trait={trait} coherence={coh}{task_log}")
+                        print(f"  layer {l:2d} {k} {pole} coef {c:+.3f}: trait={trait} coherence={coh}{task_log}")
 
     print("\n每个维度与测量极点的推荐注入层（效果最大且连贯）：")
     cmax, cmin = max(coefs), min(coefs)

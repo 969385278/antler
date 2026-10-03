@@ -96,3 +96,11 @@ def test_tiny_model_token_ids_reproduce_text(model, monkeypatch):
                       return_details=True, return_token_ids=True)[0]
     assert Tokenizer().batch_decode([result["token_ids"]])[0] == result["text"]
     assert len(result["token_ids"]) == 3
+
+
+def test_sampling_seed_reproduces_tokens_at_fixed_batch_size(model, monkeypatch):
+    monkeypatch.setattr(model.generation_config, "eos_token_id", None)
+    kw = dict(max_new_tokens=8, temperature=1., batch_size=2, return_details=True, return_token_ids=True)
+    first = generate(model, Tokenizer(), ["4 5", "6"], seed=17, **kw)
+    assert first == generate(model, Tokenizer(), ["4 5", "6"], seed=17, **kw)
+    assert first != generate(model, Tokenizer(), ["4 5", "6"], seed=18, **kw)
