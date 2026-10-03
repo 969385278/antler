@@ -142,6 +142,15 @@ git pull --ff-only && bash scripts/run_e0_diagnostics.sh
 - 结束后显示 `summary.md` 和 `results.zip` 的完整路径；把 `results.zip` 发回来即可。结果包包含逐条回答、评分、每步元数据和日志；备份留在服务器，不打包。最近一轮位置记录在 `outputs/main/diagnostics/latest.json`。
 - 本入口仅编排已实现的 C17 与 C6；后续 C18–C21 根据结果再决定。它沿用当前校准流程，不代表 E0 正式通过。
 
+#### C20：区分人格变化、任务理解和生成截断
+
+在 judge 校准命令中加 `--with-task --max-new-tokens 320 --save-samples`：
+
+- 每条回答保存人格分、连贯性、生成 token 数及停止原因 `eos/length`；启用 `--with-task` 后另存任务理解分。
+- 三类评分分别计算有效数和均值，缺失分不当作零分。CSV 仅在开启任务评分时追加 `task` 列。
+- 默认关闭任务评分；未指定长度时仍沿用原配置。提取阶段的 200 token 配置保持原样。
+- 任务理解提示采用规格第 4.6 节原文。本轮分数标记为探索性、未经人工验证；首次正式使用前需作者盲标 30 条，Spearman ≥ 0.6。
+
 ### E1：单段经历能否写成向量（第 2 周）
 
 ```bash

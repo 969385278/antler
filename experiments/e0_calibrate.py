@@ -23,6 +23,7 @@ import transformers
 from _common import parse_args, setup
 from antler.config import ROOT, sweep_layers
 from antler.core.model import n_layers
+from antler.eval.judge import COHERENCE_PROMPT, TASK_PROMPT
 from antler.eval.trait_score import mcq_high_prob, trait_score
 from antler.traits.data import BIG_FIVE, DIM_NAMES, DIMS, KIT, load_jsonl
 from antler.traits.vectors import load_directions, steer_vector
@@ -40,6 +41,8 @@ def add_arguments(ap):
     ap.add_argument("--n-samples", type=int, default=1, help="生成式测量每题采样次数，默认 1")
     ap.add_argument("--save-samples", action="store_true", help="逐点保存生成回答和评分（仅 judge 模式）")
     ap.add_argument("--reuse-baseline", action="store_true", help="同一次运行内，每个维度的零注入只测一次")
+    ap.add_argument("--with-task", action="store_true", help="补打任务理解分（探索性评分，尚待作者盲标验证）")
+    ap.add_argument("--max-new-tokens", type=int, help="覆盖评测生成长度；省略时沿用配置（不影响提取长度）")
 
 
 def scan_settings(args, cfg, count):
@@ -58,7 +61,19 @@ def scan_settings(args, cfg, count):
         raise ValueError("--save-samples 和多次采样仅适用于 judge 模式")
     if args.mode == "mcq" and args.pole != "high":
         raise ValueError("--pole low/both 需要使用 judge 模式和对应极点的评测题")
+    if args.mode == "mcq" and (args.with_task or args.max_new_tokens is not None):
+        raise ValueError("--with-task 和 --max-new-tokens 仅适用于 judge 模式")
+    if args.mode == "judge":
+        generation_limit(args, cfg)
     return layers, coefs
+
+
+def generation_limit(args, cfg):
+    """生成长度只覆盖当前测量，保持配置及提取阶段不变。"""
+    limit = args.max_new_tokens if args.max_new_tokens is not None else cfg.get("max_new_tokens", 200)
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        raise ValueError("max_new_tokens 必须是正整数")
+    return limit
 
 
 def measurement_poles(args):
@@ -79,7 +94,7 @@ def _redacted(value):
 @contextmanager
 def record_run(args, cfg, judge, layers, coefs):
     """开启逐题保存时，同时记录本次精测的来源和结束状态。"""
-    if not args.save_samples:
+    if not (args.save_samples or args.with_task or args.max_new_tokens is not None):
         yield
         return
 
@@ -103,6 +118,13 @@ def record_run(args, cfg, judge, layers, coefs):
             "judge": _redacted({k: getattr(judge, k, None) for k in ("model", "base_url", "max_tokens", "extra_body")}),
             "seed": 0, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
             "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args),
+            "max_new_tokens": generation_limit(args, cfg) if args.mode == "judge" else None,
+            "with_task": args.with_task,
+            "task_score_validation": "unvalidated" if args.with_task else "not_enabled",
+            "task_score_use": "exploratory" if args.with_task else "not_enabled",
+            "prompt_hashes": {"COHERENCE_PROMPT": hashlib.sha256(COHERENCE_PROMPT.encode("utf-8")).hexdigest(),
+                              **({"TASK_PROMPT": hashlib.sha256(TASK_PROMPT.encode("utf-8")).hexdigest()}
+                                 if args.with_task else {})},
             "reuse_baseline": args.reuse_baseline,
             "data_hashes": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.exists()}}
     path = cfg["out_path"] / "run_meta.json"
@@ -134,6 +156,8 @@ def main():
     U, s = D["U"], D["s"]
     poles = measurement_poles(args)
     print(f"[扫描] 层 {layers}，系数 {coefs}，维度 {args.dims}，模式 {args.mode}，测量极点 {poles}")
+    if args.with_task:
+        print("[任务理解] 本次分数仅用于探索性诊断；尚未完成作者盲标一致性验证。")
 
     mcq_items = {}
     if args.mode == "mcq":
@@ -153,7 +177,7 @@ def main():
     with record_run(args, cfg, judge, layers, coefs), sample_file as sf, open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         # 新字段追加在末尾，保留原有五列的位置和含义。
-        w.writerow(["layer", "dim", "coef", "trait", "coherence", "pole"])
+        w.writerow(["layer", "dim", "coef", "trait", "coherence", "pole"] + (["task"] if args.with_task else []))
         for l in layers:
             for k in args.dims:
                 ki = DIMS.index(k)
@@ -170,7 +194,8 @@ def main():
                         elif args.mode == "judge":
                             r = trait_score(model, tok, judge, k, steer=steer, pole=pole,
                                             n_questions=cfg.get("calib_questions", 10),
-                                            max_new_tokens=cfg.get("max_new_tokens", 200), n_samples=args.n_samples)
+                                            max_new_tokens=generation_limit(args, cfg), n_samples=args.n_samples,
+                                            with_task=args.with_task)
                             trait, coh = r["trait"], r.get("coherence")
                         else:
                             probs = mcq_high_prob(model, tok, mcq_items[k], steer=steer)
@@ -185,13 +210,15 @@ def main():
                             record = {"layer": l, "dim": k, "coef": c, "pole": pole,
                                       "trait_name": BIG_FIVE[k][0 if pole == "high" else 1],
                                       "n_samples": args.n_samples, "baseline_reused": reused,
+                                      "max_new_tokens": generation_limit(args, cfg), "with_task": args.with_task,
                                       "source_layer": source_layer, "result": r}
                             sf.write(json.dumps(record, ensure_ascii=False) + "\n")
                             sf.flush()
-                        w.writerow([l, k, c, trait, coh, pole])
+                        w.writerow([l, k, c, trait, coh, pole] + ([r.get("task")] if args.with_task else []))
                         f.flush()
                         results.append((l, k, c, trait, coh, pole))
-                        print(f"  layer {l:2d} {k} {pole} coef {c:+.2f}: trait={trait} coherence={coh}")
+                        task_log = f" task={r.get('task')}" if args.with_task else ""
+                        print(f"  layer {l:2d} {k} {pole} coef {c:+.2f}: trait={trait} coherence={coh}{task_log}")
 
     print("\n每个维度与测量极点的推荐注入层（效果最大且连贯）：")
     cmax, cmin = max(coefs), min(coefs)

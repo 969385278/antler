@@ -31,6 +31,7 @@ def test_legacy_defaults_and_cli_overrides(calibration):
     assert calibration.scan_settings(args, cfg, 4) == ([0, 2], [-0.1, 0, 0.1])
     assert not args.save_samples and not args.reuse_baseline and args.n_samples == 1
     assert args.pole == "high"
+    assert args.with_task is False and args.max_new_tokens is None
     args = arguments(calibration, "--layers", "1", "3", "--coefs", "-0.4", "0", "0.4",
                      "--n-samples", "3")
     assert calibration.scan_settings(args, cfg, 4) == ([1, 3], [-0.4, 0, 0.4])
@@ -43,6 +44,8 @@ def test_legacy_defaults_and_cli_overrides(calibration):
     ["--dims", "X"], ["--mode", "mcq", "--save-samples"],
     ["--mode", "mcq", "--n-samples", "2"],
     ["--mode", "mcq", "--pole", "low"], ["--mode", "mcq", "--pole", "both"],
+    ["--mode", "mcq", "--with-task"], ["--mode", "mcq", "--max-new-tokens", "320"],
+    ["--max-new-tokens", "0"], ["--max-new-tokens", "-1"],
 ])
 def test_invalid_settings(calibration, argv):
     with pytest.raises(ValueError):
@@ -82,6 +85,7 @@ def test_judge_sweep_outputs(calibration, model, monkeypatch, tmp_path, reuse, s
     assert len(calls) == (10 if reuse else 12) * len(selected)
     assert sum(kw["steer"] is None for _, kw in calls) == (2 if reuse else 4) * len(selected)
     assert all(kw["n_samples"] == 2 for _, kw in calls)
+    assert all(kw["max_new_tokens"] == 8 and kw["with_task"] is False for _, kw in calls)
     assert {kw["pole"] for _, kw in calls} == set(selected)
     rows = list(csv.DictReader((tmp_path / "calibration_judge.csv").open(encoding="utf-8")))
     assert len(rows) == 12 * len(selected)
@@ -97,6 +101,7 @@ def test_judge_sweep_outputs(calibration, model, monkeypatch, tmp_path, reuse, s
         assert meta["layers"] == [1, 2] and meta["n_samples"] == 2
         assert len(meta["data_hashes"]) == 2 * len(selected)
         assert meta["pole"] == pole and meta["poles"] == selected
+        assert meta["max_new_tokens"] == 8 and meta["with_task"] is False
         records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
         assert len(records) == 12 * len(selected)
         reused = [r for r in records if r["baseline_reused"]]
@@ -183,3 +188,47 @@ def test_low_recommendation_uses_own_direction_and_coherence(calibration, model,
     output = capsys.readouterr().out
     assert "C high: layer 2，效果 60.0" in output
     assert "C low: layer 1，效果 70.0" in output
+
+
+@pytest.mark.parametrize("save_samples", [False, True])
+def test_task_scoring_cli_csv_and_metadata(calibration, model, monkeypatch, tmp_path, save_samples):
+    cfg = {"out_path": tmp_path, "layers": [1, 2], "coefs": [0], "max_new_tokens": 200}
+    monkeypatch.setattr(calibration, "setup", lambda *a, **kw: (cfg, model, None, object()))
+    monkeypatch.setattr(calibration, "load_directions", lambda p: {
+        "U": torch.eye(5, model.config.hidden_size).repeat(4, 1, 1), "s": torch.ones(4)})
+    calls = []
+
+    def measure(*args, **kwargs):
+        calls.append(kwargs)
+        return {"trait": 25, "coherence": 85, "task": 90, "n_valid": 1,
+                "n_valid_coherence": 1, "n_valid_task": 1,
+                "samples": [{"q": "问题", "a": "回答", "trait": 25, "coherence": 85, "task": 90,
+                             "n_generated_tokens": 320, "finish_reason": "length"}]}
+
+    monkeypatch.setattr(calibration, "trait_score", measure)
+    argv = ["e0_calibrate.py", "--dims", "C", "--pole", "low", "--reuse-baseline", "--with-task",
+            "--max-new-tokens", "320"]
+    if save_samples:
+        argv.append("--save-samples")
+    monkeypatch.setattr(sys, "argv", argv)
+    calibration.main()
+    assert len(calls) == 1 and calls[0]["with_task"] is True and calls[0]["max_new_tokens"] == 320
+    assert cfg["max_new_tokens"] == 200
+    rows = list(csv.DictReader((tmp_path / "calibration_judge.csv").open(encoding="utf-8")))
+    assert list(rows[0]) == ["layer", "dim", "coef", "trait", "coherence", "pole", "task"]
+    assert [r["task"] for r in rows] == ["90", "90"]
+    meta = json.loads((tmp_path / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["max_new_tokens"] == 320 and meta["with_task"] is True and meta["status"] == "completed"
+    assert meta["task_score_validation"] == "unvalidated" and meta["task_score_use"] == "exploratory"
+    assert set(meta["prompt_hashes"]) == {"COHERENCE_PROMPT", "TASK_PROMPT"}
+    if save_samples:
+        samples = [json.loads(line) for line in (tmp_path / "calibration_judge_samples.jsonl")
+                   .read_text(encoding="utf-8").splitlines()]
+        assert samples[1]["baseline_reused"] and samples[0]["result"] == samples[1]["result"]
+        assert all(s["max_new_tokens"] == 320 and s["with_task"] is True for s in samples)
+
+
+@pytest.mark.parametrize("limit", [0, -2, 1.5, True])
+def test_invalid_config_generation_limit(calibration, limit):
+    with pytest.raises(ValueError, match="正整数"):
+        calibration.scan_settings(arguments(calibration), {"layers": [1], "max_new_tokens": limit}, 4)

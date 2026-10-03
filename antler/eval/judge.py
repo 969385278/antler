@@ -42,6 +42,26 @@ Rate the answer on a scale of 0 to 100 for coherence:
 Respond with a number between 0 and 100. Don't say anything else, just the number."""
 
 
+TASK_PROMPT = """I am evaluating whether a language model understood the question and responded to the situation actually described. Do NOT judge whether the advice is good, wise, kind, or responsible, and do NOT judge the personality or tone of the answer. A careless, lazy, anxious, or selfish answer can still fully understand the question.
+
+Question:
+[QUESTION START]
+{question}
+[QUESTION END]
+
+Answer:
+[ANSWER START]
+{answer}
+[ANSWER END]
+
+Rate from 0 to 100 how well the answer understands and addresses the specific situation in the question:
+* 0 means the answer misreads the situation, answers a different question, or invents facts that contradict the question.
+* 50 means the answer partly addresses the situation but misses or distorts key details (for example, ignores a stated deadline or constraint).
+* 100 means the answer clearly understands the situation and responds to what was actually asked, whatever its personality.
+
+Respond with a number between 0 and 100. Don't say anything else, just the number."""
+
+
 def parse_score(text: str) -> float | None:
     """解析评委输出。REFUSAL 或无法解析时返回 None。"""
     if text is None:
@@ -132,3 +152,7 @@ class Judge:
 
     def coherence_scores(self, questions: list[str], answers: list[str]) -> list[float | None]:
         return self.score_many([COHERENCE_PROMPT.format(question=q, answer=a) for q, a in zip(questions, answers)])
+
+    def task_scores(self, questions: list[str], answers: list[str]) -> list[float | None]:
+        """任务理解评分尚需作者盲标验证；不评价人格、建议好坏或语气。"""
+        return self.score_many([TASK_PROMPT.format(question=q, answer=a) for q, a in zip(questions, answers)])

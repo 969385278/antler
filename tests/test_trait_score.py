@@ -38,7 +38,9 @@ def test_pole_selects_questions_prompt_and_keeps_steering(model, monkeypatch, di
         with torch.no_grad(), (Steer(m, steer) if steer else no_steer()):
             changed = m(torch.tensor([[1, 2, 3]])).logits
         assert not torch.allclose(changed, baseline)
-        return [f"回答{i}" for i in range(len(prompts))]
+        assert kwargs["return_details"] is True
+        return [{"text": f"回答{i}", "n_generated_tokens": i + 1, "finish_reason": "eos"}
+                for i in range(len(prompts))]
 
     class Judge:
         def trait_scores(self, prompt, qs, answers):
@@ -60,6 +62,11 @@ def test_pole_selects_questions_prompt_and_keeps_steering(model, monkeypatch, di
     assert result["pole"] == selected and result["trait_name"] == trait_name
     assert result["dim"] == dim and result["trait"] == 40 and result["n_valid"] == 3
     assert result["coherence"] == 90 and calls == ["trait", "coherence"]
+    assert result["n_valid_coherence"] == 3
+    assert [s["coherence"] for s in result["samples"]] == [80, 90, None, 100]
+    assert [s["n_generated_tokens"] for s in result["samples"]] == [1, 2, 3, 4]
+    assert all(s["finish_reason"] == "eos" for s in result["samples"])
+    assert "task" not in result and all("task" not in s for s in result["samples"])
     assert [s["q"] for s in result["samples"]] == questions
     assert result["samples"][1]["trait"] is None
     assert torch.allclose(model(torch.tensor([[1, 2, 3]])).logits, baseline)
@@ -76,3 +83,37 @@ def test_invalid_pole_fails_before_generation(monkeypatch, pole):
     monkeypatch.setattr(scoring, "generate", unexpected)
     with pytest.raises(ValueError, match="high 或 low"):
         scoring.trait_score(None, None, None, "C", pole=pole)
+
+
+@pytest.mark.parametrize("with_coherence", [False, True])
+@pytest.mark.parametrize("missing", [False, True])
+def test_task_and_coherence_use_separate_valid_counts(monkeypatch, with_coherence, missing):
+    monkeypatch.setattr(scoring, "generate", lambda *a, **kw: [
+        {"text": "回答一", "n_generated_tokens": 5, "finish_reason": "eos"},
+        {"text": "回答二", "n_generated_tokens": 200, "finish_reason": "length"},
+    ])
+
+    class Judge:
+        def trait_scores(self, *args):
+            return [10, 30]
+
+        def coherence_scores(self, qs, answers):
+            assert with_coherence
+            return [None, 90]
+
+        def task_scores(self, qs, answers):
+            assert len(qs) == 2 and answers == ["回答一", "回答二"]
+            return [None, None] if missing else [70, 90]
+
+    result = scoring.trait_score(None, Tokenizer(), Judge(), "N", n_questions=2,
+                                 with_coherence=with_coherence, with_task=True)
+    assert result["n_valid"] == 2
+    assert result["n_valid_task"] == (0 if missing else 2)
+    assert result["task"] == (None if missing else 80)
+    assert [s["task"] for s in result["samples"]] == ([None, None] if missing else [70, 90])
+    if with_coherence:
+        assert result["coherence"] == 90 and result["n_valid_coherence"] == 1
+        assert [s["coherence"] for s in result["samples"]] == [None, 90]
+    else:
+        assert "coherence" not in result and "n_valid_coherence" not in result
+        assert all("coherence" not in sample for sample in result["samples"])

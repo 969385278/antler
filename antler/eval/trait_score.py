@@ -18,7 +18,8 @@ from ..traits.data import BIG_FIVE, load_trait
 
 def trait_score(model, tok, judge, dim: str, *, steer=None, n_questions: int = 20, n_samples: int = 1,
                 max_new_tokens: int = 200, temperature: float = 1.0, seed: int = 0,
-                with_coherence: bool = True, system: str | None = None, pole: str = "high") -> dict:
+                with_coherence: bool = True, system: str | None = None, pole: str = "high",
+                with_task: bool = False) -> dict:
     """使用指定极点自己的评测题和提示；分数越高越体现该极点，不翻转注入方向。"""
     if pole not in ("high", "low"):
         raise ValueError("pole 必须是 high 或 low")
@@ -26,14 +27,28 @@ def trait_score(model, tok, judge, dim: str, *, steer=None, n_questions: int = 2
     data = load_trait(trait_name, "eval")
     qs = data["questions"][:n_questions] * n_samples
     prompts = [chat_prompt(tok, q, system=system) for q in qs]
-    answers = generate(model, tok, prompts, steer=steer, max_new_tokens=max_new_tokens,
-                       temperature=temperature, seed=seed)
+    generated = generate(model, tok, prompts, steer=steer, max_new_tokens=max_new_tokens,
+                         temperature=temperature, seed=seed, return_details=True)
+    answers = [item["text"] for item in generated]
     ts = judge.trait_scores(data["eval_prompt"], qs, answers)
     out = {"dim": dim, "pole": pole, "trait_name": trait_name,
            "trait": _mean(ts), "n_valid": sum(t is not None for t in ts)}
+    samples = [{"q": q, "a": a, "trait": t, "n_generated_tokens": item["n_generated_tokens"],
+                "finish_reason": item["finish_reason"]}
+               for q, a, t, item in zip(qs, answers, ts, generated)]
     if with_coherence:
-        out["coherence"] = _mean(judge.coherence_scores(qs, answers))
-    out["samples"] = [{"q": q, "a": a, "trait": t} for q, a, t in zip(qs, answers, ts)]
+        cs = judge.coherence_scores(qs, answers)
+        out["coherence"] = _mean(cs)
+        out["n_valid_coherence"] = sum(c is not None for c in cs)
+        for sample, coherence in zip(samples, cs):
+            sample["coherence"] = coherence
+    if with_task:
+        tasks = judge.task_scores(qs, answers)
+        out["task"] = _mean(tasks)
+        out["n_valid_task"] = sum(t is not None for t in tasks)
+        for sample, task in zip(samples, tasks):
+            sample["task"] = task
+    out["samples"] = samples
     return out
 
 
