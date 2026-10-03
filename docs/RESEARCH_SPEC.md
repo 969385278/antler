@@ -1217,6 +1217,8 @@ Do AI Personas Grow?（Wang et al., 2026）整理了 11 类生活事件后人类
 
 ## 15. 可复现性与工程规范
 
+2026-10-04 C5追加运行前登记：N第21层剥离+0.20候选的生成式decode能力诊断，固定既有1400题、同期zero与候选、192token贪心、2800条；保存答案前真实注入轨迹与严格末行解析，失败答案仍计入分母。只作诊断，不替换canonical选项logit闸门或正式all机制，不使用人格test、不更改门槛。完整来源哈希、提示、停止规则见 `docs/E0_GENERATED_CAPABILITY_2026-10-04.md`。
+
 每次正式运行都在输出目录下写一个 `run_meta.json`（Codex 任务 C3），至少包含：
 
 ```json
