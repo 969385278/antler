@@ -45,3 +45,8 @@ def test_mcq_cannot_qualify_quality_layer(monkeypatch,tmp_path):
     assert all(r['spearman_expected']==pytest.approx(1.) for r in result['curves'])
     p.write_text(text.replace(',,high',',90,high'),encoding='utf-8')
     assert module.analyze_csv(p)['legacy_candidate']['layer']==16
+    second=text.replace('16,','17,').replace(',90,,high',',88,,high').split('\n',1)[1]
+    p.write_text((text+second).replace(',,high',',90,high'),encoding='utf-8')
+    result=module.analyze_csv(p)
+    assert result['legacy_candidate'] is None and result['needs_capability_tiebreak']
+    assert len(result['tied_candidates'])==2

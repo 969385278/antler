@@ -51,8 +51,11 @@ def analyze_csv(path):
                 and r['spearman_expected'] is not None and r['spearman_expected']>=.9
                 and r['minimum_coherence']>=75 for r in high)):
             eligible.append({'layer':layer,'minimum_range_effect':min(r['range_effect'] for r in high)})
+    best=max((r['minimum_range_effect'] for r in eligible),default=None)
+    tied=[r for r in eligible if best-r['minimum_range_effect']<=5] if best is not None else []
     return {'source':str(path),'curves':results,'legacy_eligible_layers':eligible,
-            'legacy_candidate':max(eligible,key=lambda r:r['minimum_range_effect']) if eligible else None}
+            'legacy_candidate':tied[0] if len(tied)==1 else None,
+            'needs_capability_tiebreak':len(tied)>1,'tied_candidates':tied}
 
 
 def analyze_samples(path):
@@ -102,12 +105,12 @@ def run(args):
             import matplotlib.pyplot as plt
             for i,file in enumerate(curves):
                 dims=[d for d in DIMS if any(r['dim']==d for r in file['curves'])]
-                fig,axes=plt.subplots(1,len(dims),figsize=(max(4,4*len(dims)),3),sharey=True,squeeze=False)
+                fig,axes=plt.subplots(1,len(dims),figsize=(max(5,5*len(dims)),3),sharey=True,squeeze=False)
                 for ax,dim in zip(axes[0],dims):
                     for row in file['curves']:
                         if row['dim']==dim:ax.plot(row['coefs'],row['traits'],marker='o',label=f"L{row['layer']} {row['pole']}")
                     ax.set(title=dim,xlabel='Coefficient',ylim=(0,100))
-                    if ax.lines:ax.legend(fontsize=6)
+                    if ax.lines:ax.legend(fontsize=6,loc='upper left',bbox_to_anchor=(1.02,1))
                 axes[0][0].set_ylabel('Trait score')
                 fig.tight_layout();fig.savefig(out/f'curves_{i}.png',dpi=160);plt.close(fig)
         lines=['# E0校准分析','','以下为数字筛选，不代表正式E0通过。','', '|来源|维度/极点|系数|数字门槛|未满足项|','|-|-|-|-|-|']
