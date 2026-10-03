@@ -1,5 +1,6 @@
 """C8：按题目聚合的统计工具，不把同题重复生成当作独立样本。"""
 import math
+from fractions import Fraction
 from statistics import NormalDist
 
 import numpy as np
@@ -45,6 +46,18 @@ def paired_bootstrap(a, a_ids, b, b_ids, *, n_boot=10000, confidence=.95, seed=0
     shared = [q for q in left if q in right]
     differences = [right[q] - left[q] for q in shared]
     result = _bootstrap(differences, n_boot, confidence, seed)
+    # 点估计用精确十进制分数计算，避免恰好下降10分被浮点误判为超限。
+    # 仍然每题等权；不改变重采样分布、区间或缺失题处理。
+    def exact_means(values, ids):
+        groups = {}
+        for value, question in zip(values, ids):
+            if value is not None and question in shared:
+                groups.setdefault(question, []).append(Fraction(str(float(value))))
+        return {q: sum(v, Fraction(0)) / len(v) for q, v in groups.items()}
+
+    exact_left, exact_right = exact_means(a, a_ids), exact_means(b, b_ids)
+    result['mean'] = float(sum((exact_right[q] - exact_left[q] for q in shared),
+                               Fraction(0)) / len(shared))
     sd = float(np.std(differences, ddof=1))
     result.update(n_unpaired_questions=len(set(left) | set(right)) - len(shared),
                   effect_size_dz=result['mean'] / sd if sd > 0 else None)
