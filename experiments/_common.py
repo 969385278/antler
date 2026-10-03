@@ -20,10 +20,13 @@ def parse_args(extra=None):
     return ap.parse_args()
 
 
-def setup(args, need_judge: bool = True):
+def setup(args, need_judge: bool = True, *, need_model: bool = True):
+    """默认加载模型；只给已有回答评分的脚本可显式跳过模型和分词器。"""
     cfg = load_config(args.config)
     print(f"[配置] {args.config} → 输出到 {cfg['out_path']}")
-    model, tok = load_model(cfg["model"], cfg.get("dtype", "bfloat16"), cfg.get("device", "auto"))
+    model, tok = None, None
+    if need_model:
+        model, tok = load_model(cfg["model"], cfg.get("dtype", "bfloat16"), cfg.get("device", "auto"))
     judge = None
     if need_judge and cfg.get("use_judge", True):
         from antler.eval.judge import Judge

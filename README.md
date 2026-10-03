@@ -112,6 +112,20 @@ python experiments/e0_calibrate.py --mode judge --config configs/main.yaml \
 - 推荐层按两极分别计算：高极为最大系数分减最小系数分，低极反向计算。该输出仍是扫描建议，不代表 E0 正式验收。
 - MCQ 保持高特质选项概率的原有含义，`--pole low/both` 仅用于 judge 模式。本任务未改生成长度，仍按配置使用 200 tokens；长度与停止原因改动属于 C20。
 
+#### C17：给已有提取回答补打连贯性分
+
+```bash
+python -u experiments/e0_extract_coherence.py --config configs/main.yaml
+# 可选：只检查指定极点
+python -u experiments/e0_extract_coherence.py --config configs/main.yaml --poles dependable careless
+```
+
+- 默认读取输出目录下 `vectors/` 中 dependable、careless、nervous、calm 的 `*_samples.json`，只调用现有评委的连贯性评分；不加载生成模型、不重新生成回答、不修改原文件。
+- `extract_coherence.json` 按极点和 pos/neg 给出总数、有效数、缺失数、平均连贯性和低于 50 的比例。均值和低分比例以有效评分数为分母，50 本身不算低分；全缺失时为 `null`。
+- `extract_coherence_samples.jsonl` 保存每条的 `pole`、从 0 开始的 `source_index`、`side`、原问题/回答/人格分、连贯性分及源文件 SHA-256，供 C18 按原始顺序对齐。
+- 所有输入会先校验再评分，API 失败时保留已有汇总和逐条结果；再次运行利用现有 `judge_cache.jsonl` 复用已成功评分。
+- 每次写 `run_meta.json`，记录输入哈希、评委和完成状态。运行前备份同名结果及旧元数据；接着运行校准前，可将本次元数据另存为 `extract_coherence_run_meta.json`。
+
 ### E1：单段经历能否写成向量（第 2 周）
 
 ```bash
