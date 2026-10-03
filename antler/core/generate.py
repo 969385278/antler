@@ -11,13 +11,16 @@ from .model import model_device
 def generate(model, tok, prompts: list[str], *, steer: dict[int, torch.Tensor] | None = None,
              max_new_tokens: int = 256, temperature: float = 1.0, top_p: float = 1.0,
              batch_size: int = 16, seed: int | None = None,
-             return_details: bool = False) -> list[str] | list[dict]:
+             return_details: bool = False, return_token_ids: bool = False) -> list[str] | list[dict]:
     """prompts 是已经套好对话模板的字符串。返回每条 prompt 生成的回答文本。
 
     temperature=0 表示贪心解码。steer 不为 None 时，整个生成过程都注入这些向量。
     return_details=True 时返回 text、n_generated_tokens、finish_reason。
     token 数包括首个 EOS，不包括提示或停止后的批补齐；恰好在长度上限输出 EOS 也记为 eos。
+    return_token_ids=True 时额外保存实际生成 token，必须同时开启 return_details。
     """
+    if return_token_ids and not return_details:
+        raise ValueError("return_token_ids 需要同时开启 return_details")
     if seed is not None:
         torch.manual_seed(seed)
     tok.padding_side = "left"
@@ -50,5 +53,6 @@ def generate(model, tok, prompts: list[str], *, steer: dict[int, torch.Tensor] |
             count = len(token_ids) if eos_at is None else eos_at + 1
             text = tok.batch_decode([token_ids[:count]], skip_special_tokens=True)[0]
             outs.append({"text": text, "n_generated_tokens": count,
-                         "finish_reason": "length" if eos_at is None else "eos"})
+                         "finish_reason": "length" if eos_at is None else "eos",
+                         **({"token_ids": token_ids[:count]} if return_token_ids else {})})
     return outs

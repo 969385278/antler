@@ -79,3 +79,20 @@ def test_tiny_cpu_model_details_match_legacy_and_batch_order(model, monkeypatch)
     assert legacy == [row["text"] for row in details]
     assert all(row["finish_reason"] == "length" and row["n_generated_tokens"] == 3 for row in details)
     assert all(not p.requires_grad for p in model.parameters())
+
+
+def test_token_ids_keep_first_eos_and_remove_padding():
+    result = generate(FakeModel([[12, 3, 2, 2]], [2, 3]), Tokenizer(2), ["8"],
+                      max_new_tokens=4, return_details=True, return_token_ids=True)
+    assert result[0]["token_ids"] == [12, 3]
+    assert result[0]["n_generated_tokens"] == 2
+    with pytest.raises(ValueError, match="return_details"):
+        generate(FakeModel([[2]], 2), Tokenizer(), ["8"], return_token_ids=True)
+
+
+def test_tiny_model_token_ids_reproduce_text(model, monkeypatch):
+    monkeypatch.setattr(model.generation_config, "eos_token_id", None)
+    result = generate(model, Tokenizer(), ["4 5"], max_new_tokens=3, temperature=0,
+                      return_details=True, return_token_ids=True)[0]
+    assert Tokenizer().batch_decode([result["token_ids"]])[0] == result["text"]
+    assert len(result["token_ids"]) == 3
