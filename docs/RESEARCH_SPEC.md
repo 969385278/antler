@@ -251,6 +251,8 @@ h_ℓ ← h_ℓ + s_ℓ · Σ_k z_k u_{k,ℓ}        （steer_vector(U_ℓ, s_�
 
 2026-10-04追加测量诊断登记：固定六个助手新编情境、每题四种理解/服从类型，原TASK_PROMPT和评委三轮独立缓存评分，共72项。只检查量尺及轮间差异，不改变提示、原评分或E0通过规则；不使用trait_eval/test，不把助手锚点当人工金标。完整事前条件与停止规则见 `docs/E0_TASK_ANCHORS_2026-10-04.md`。
 
+上述锚点诊断已完成：72项评分中基础区分18/18题轮通过；理解/服从混淆3/18，均来自同一文件格式情境，风格混淆0/18；三轮逐条相同。局部边界信号不支持把C失败主要归因于普遍误罚，不改提示或历史分数。短锚点稳定不否定真实长回答评分变化；详见 `docs/E0_TASK_ANCHOR_RESULTS_2026-10-04.md`。
+
 ```
 I am evaluating whether a language model understood the question and responded to the situation actually described. Do NOT judge whether the advice is good, wise, kind, or responsible, and do NOT judge the personality or tone of the answer. A careless, lazy, anxious, or selfish answer can still fully understand the question.
 
