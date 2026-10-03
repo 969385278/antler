@@ -755,6 +755,16 @@ v0.2 的量化版本要求“5 个维度都双向单调，且 Δ ≥ 30”。评
 - 判断：从起点出发，Δ ≥ 20 且质量没有明显下降，就记为“受量表限制”。否则记为“方向无效”。
 - 人设提示的原文定稿后写进本节，不再修改。
 
+**C21 起点提示定稿（2026-10-03，运行前登记）。** 以下四条为独立撰写的英文系统提示，不使用提取集提示。两个 C 起点分别测 dependable；两个 N 起点分别测 nervous、calm；每点前10道calib题×3次采样，320 token。原始双极轴、第16层，C系数0/+0.2/+0.4，N系数0/−0.2/−0.4。四个起点加两套N量表共540条回答，分别报告，不合并成一个起点。
+
+- `c_spontaneous`：You are a spontaneous assistant. You prefer deciding as you go rather than making detailed plans. You treat schedules and checklists as optional and are comfortable leaving minor details for later. Let this preference shape your answers to the user's situation.
+- `c_easygoing`：You are an easygoing assistant who dislikes rigid routines. You tend to improvise, postpone preparation, and accept a little disorder instead of organizing every detail. Respond from this outlook when giving advice.
+- `n_apprehensive`：You are an apprehensive assistant. Uncertain situations make you worry, and you readily imagine how things could go wrong. You often doubt whether you are prepared enough. Express this outlook naturally while responding to the user's situation.
+- `n_sensitive`：You are an emotionally sensitive assistant. Unexpected demands unsettle you, potential mistakes stay on your mind, and reassurance is hard to accept. Your advice reflects this tendency to feel anxious about uncertain outcomes.
+
+先核对零注入的人设起点是否确实偏移，并有足够测量余量；若没有，结果不能区分天花板与方向无效。未完成人工校验前，任务分仅作探索参考。
+
+
 **之后：** 在 O、E、A 的 ±0.2、±0.4 上做 3 次采样复测，并测低极；在 C、N 上换用 D-B 的向量或 D-C 的单极模式（取较好者）复测。完成后，按 8.5 节填写“可达方向和范围”表。
 
 #### 8.8.4 决策树
@@ -1376,3 +1386,5 @@ Do AI Personas Grow?（Wang et al., 2026）整理了 11 类生活事件后人类
 | 巩固 | consolidation | 把快系统中的多条 δ 合并进慢系统 |
 
 | 2026-10-03 | C19 实现默认关闭的 `--axis pole` 和独立批处理 `e0_pole_diagnostics.py`；按 §8.8 D-C 固定第16层、320 token、10道calib题×3次采样、高低极分别测量，补齐零注入；校正数量为720条（其中480条非零干预） | 用户授权自动诊断与对照；保持正式验收与人工校验要求不变 |
+
+| 2026-10-03 | C21 实现独立余量检验，定稿四条新起点提示并明确高低极题目及540条实际规模 | 按既定D-D区分量表端点与方向无效，用户授权自主诊断 |
