@@ -126,6 +126,22 @@ python -u experiments/e0_extract_coherence.py --config configs/main.yaml --poles
 - 所有输入会先校验再评分，API 失败时保留已有汇总和逐条结果；再次运行利用现有 `judge_cache.jsonl` 复用已成功评分。
 - 每次写 `run_meta.json`，记录输入哈希、评委和完成状态。运行前备份同名结果及旧元数据；接着运行校准前，可将本次元数据另存为 `extract_coherence_run_meta.json`。
 
+#### 一次跑完当前 C17 + C6 诊断（推荐）
+
+服务器在仓库根目录执行：
+
+```bash
+git pull --ff-only && bash scripts/run_e0_diagnostics.sh
+```
+
+- 自动加载根目录 `.env`；优先使用 `.venv/bin/python`，否则用当前环境的 `python`。
+- 先给 dependable、careless、nervous、calm 的已有提取回答补分，再测第 16 层 C/N 的低极，系数 `-0.2 / 0`，前 10 道 calib 题每题采样 3 次，共生成 120 条回答。沿用现有评委和配置中的生成长度。
+- 启动前检查两步输入；旧结果自动备份到 `outputs/main/diagnostics/<本轮编号>/backup/`。不要同时手动运行其他写入 `outputs/main` 的实验脚本。
+- 每步保存日志、结果和各自的 `run_meta.json`；失败立即停止。再次运行同一命令，会校验输入及归档文件哈希，跳过已完成步骤；失败步骤重新执行，评委缓存继续复用。
+- 配置、输入、代码或评委设置变化后自动新建一轮。需要主动重做时加 `--fresh`；一键入口没有逐测量点恢复，C6 中断后会重跑其 4 个测量点。
+- 结束后显示 `summary.md` 和 `results.zip` 的完整路径；把 `results.zip` 发回来即可。结果包包含逐条回答、评分、每步元数据和日志；备份留在服务器，不打包。最近一轮位置记录在 `outputs/main/diagnostics/latest.json`。
+- 本入口仅编排已实现的 C17 与 C6；后续 C18–C21 根据结果再决定。它沿用当前校准流程，不代表 E0 正式通过。
+
 ### E1：单段经历能否写成向量（第 2 周）
 
 ```bash
