@@ -1,4 +1,4 @@
-"""C2：用 CPU 微型模型检查参数、逐题产物和基线复用，不下载模型或调用 API。"""
+"""C2/C6：用 CPU 微型模型检查扫描、测量极点与基线复用，不下载模型或调用 API。"""
 import argparse
 import csv
 import importlib
@@ -30,6 +30,7 @@ def test_legacy_defaults_and_cli_overrides(calibration):
     args = arguments(calibration)
     assert calibration.scan_settings(args, cfg, 4) == ([0, 2], [-0.1, 0, 0.1])
     assert not args.save_samples and not args.reuse_baseline and args.n_samples == 1
+    assert args.pole == "high"
     args = arguments(calibration, "--layers", "1", "3", "--coefs", "-0.4", "0", "0.4",
                      "--n-samples", "3")
     assert calibration.scan_settings(args, cfg, 4) == ([1, 3], [-0.4, 0, 0.4])
@@ -41,6 +42,7 @@ def test_legacy_defaults_and_cli_overrides(calibration):
     ["--coefs", "nan"], ["--coefs", "0", "0"], ["--n-samples", "0"],
     ["--dims", "X"], ["--mode", "mcq", "--save-samples"],
     ["--mode", "mcq", "--n-samples", "2"],
+    ["--mode", "mcq", "--pole", "low"], ["--mode", "mcq", "--pole", "both"],
 ])
 def test_invalid_settings(calibration, argv):
     with pytest.raises(ValueError):
@@ -48,7 +50,8 @@ def test_invalid_settings(calibration, argv):
 
 
 @pytest.mark.parametrize("reuse,save", [(False, False), (True, True)])
-def test_judge_sweep_outputs(calibration, model, monkeypatch, tmp_path, reuse, save):
+@pytest.mark.parametrize("pole", ["high", "low", "both"])
+def test_judge_sweep_outputs(calibration, model, monkeypatch, tmp_path, reuse, save, pole):
     cfg = {"out_path": tmp_path, "layers": [1, 2], "coefs": [-0.1, 0, 0.1],
            "calib_questions": 2, "max_new_tokens": 8}
     monkeypatch.setattr(calibration, "setup", lambda *a, **kw: (cfg, model, None, object()))
@@ -61,25 +64,29 @@ def test_judge_sweep_outputs(calibration, model, monkeypatch, tmp_path, reuse, s
         # 实际执行微型模型和注入，确认本任务仍走 Steer 且运行后卸载。
         with torch.no_grad(), (Steer(m, kw["steer"]) if kw["steer"] else no_steer()):
             value = float(m(input_ids=torch.tensor([[1, 2, 3]])).logits.mean())
-        samples = [{"q": f"问题{q}", "a": f"回答{value}", "trait": 60 if q else None}
+        score = 60 if kw["pole"] == "high" else 20
+        samples = [{"q": f"{dim}-{kw['pole']}-问题{q}", "a": f"回答{value}", "trait": score if q else None}
                    for _ in range(kw["n_samples"]) for q in range(kw["n_questions"])]
-        return {"dim": dim, "trait": 60, "coherence": 90,
+        return {"dim": dim, "pole": kw["pole"], "trait": score, "coherence": 90,
                 "n_valid": kw["n_samples"], "samples": samples}
 
     monkeypatch.setattr(calibration, "trait_score", measure)
-    argv = ["e0_calibrate.py", "--mode", "judge", "--dims", "O", "N", "--n-samples", "2"]
+    argv = ["e0_calibrate.py", "--mode", "judge", "--dims", "O", "N", "--n-samples", "2", "--pole", pole]
     if reuse:
         argv += ["--reuse-baseline"]
     if save:
         argv += ["--save-samples"]
     monkeypatch.setattr(sys, "argv", argv)
     calibration.main()
-    assert len(calls) == (10 if reuse else 12)
-    assert sum(kw["steer"] is None for _, kw in calls) == (2 if reuse else 4)
+    selected = ["high", "low"] if pole == "both" else [pole]
+    assert len(calls) == (10 if reuse else 12) * len(selected)
+    assert sum(kw["steer"] is None for _, kw in calls) == (2 if reuse else 4) * len(selected)
     assert all(kw["n_samples"] == 2 for _, kw in calls)
+    assert {kw["pole"] for _, kw in calls} == set(selected)
     rows = list(csv.DictReader((tmp_path / "calibration_judge.csv").open(encoding="utf-8")))
-    assert len(rows) == 12
-    assert list(rows[0]) == ["layer", "dim", "coef", "trait", "coherence"]
+    assert len(rows) == 12 * len(selected)
+    assert list(rows[0]) == ["layer", "dim", "coef", "trait", "coherence", "pole"]
+    assert all(float(r["trait"]) == (60 if r["pole"] == "high" else 20) for r in rows)
     path = tmp_path / "calibration_judge_samples.jsonl"
     assert path.exists() == save
     meta_path = tmp_path / "run_meta.json"
@@ -88,13 +95,18 @@ def test_judge_sweep_outputs(calibration, model, monkeypatch, tmp_path, reuse, s
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
         assert meta["status"] == "completed" and meta["end_time"] is not None
         assert meta["layers"] == [1, 2] and meta["n_samples"] == 2
-        assert len(meta["data_hashes"]) == 2
+        assert len(meta["data_hashes"]) == 2 * len(selected)
+        assert meta["pole"] == pole and meta["poles"] == selected
         records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
-        assert len(records) == 12
+        assert len(records) == 12 * len(selected)
         reused = [r for r in records if r["baseline_reused"]]
-        assert len(reused) == 2
+        assert len(reused) == 2 * len(selected)
         assert all(r["coef"] == 0 and r["layer"] == 2 and r["source_layer"] == 1 for r in reused)
         assert all(len(r["result"]["samples"]) == 4 for r in records)
+        assert all(r["pole"] == r["result"]["pole"] for r in records)
+        assert all(r["result"]["samples"][0]["q"].startswith(f"{r['dim']}-{r['pole']}-") for r in reused)
+        assert all(r["trait_name"] == calibration.BIG_FIVE[r["dim"]][0 if r["pole"] == "high" else 1]
+                   for r in records)
         assert records[0]["result"]["samples"][0]["trait"] is None
     assert all(not layer._forward_hooks for layer in model.model.layers)
     assert all(not p.requires_grad and p.grad is None for p in model.parameters())
@@ -143,5 +155,31 @@ def test_mcq_baseline_reuse_preserves_csv(calibration, model, monkeypatch, tmp_p
     assert len(calls) == 10
     rows = list(csv.DictReader((tmp_path / "calibration_mcq.csv").open(encoding="utf-8")))
     assert len(rows) == 12
-    assert all(r["trait"] == "75.0" and r["coherence"] == "" for r in rows)
+    assert all(r["trait"] == "75.0" and r["coherence"] == "" and r["pole"] == "high" for r in rows)
     assert not (tmp_path / "run_meta.json").exists()
+
+
+def test_low_recommendation_uses_own_direction_and_coherence(calibration, model, monkeypatch, tmp_path, capsys):
+    cfg = {"out_path": tmp_path, "layers": [1, 2], "coefs": [-0.2, 0.2]}
+    monkeypatch.setattr(calibration, "setup", lambda *a, **kw: (cfg, model, None, object()))
+    U = torch.eye(5, model.config.hidden_size).repeat(4, 1, 1)
+    monkeypatch.setattr(calibration, "load_directions", lambda p: {"U": U, "s": torch.ones(4)})
+
+    def measure(m, tok, judge, dim, *, steer, pole, **kw):
+        layer, vector = next(iter(steer.items()))
+        negative = vector[1] < 0
+        # 第 1 层高极不连贯，但低极清楚地随负向增强；第 2 层低极增强较弱。
+        if pole == "low":
+            score = (90 if layer == 1 else 60) if negative else 20
+            coherence = 90
+        else:
+            score = 20 if negative else 80
+            coherence = 60 if layer == 1 else 90
+        return {"trait": score, "coherence": coherence}
+
+    monkeypatch.setattr(calibration, "trait_score", measure)
+    monkeypatch.setattr(sys, "argv", ["e0_calibrate.py", "--dims", "C", "--pole", "both"])
+    calibration.main()
+    output = capsys.readouterr().out
+    assert "C high: layer 2，效果 60.0" in output
+    assert "C low: layer 1，效果 70.0" in output

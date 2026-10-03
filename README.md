@@ -94,9 +94,23 @@ python experiments/e0_calibrate.py --mode judge --config configs/main.yaml \
 - `--layers`、`--coefs` 覆盖本次运行的配置，不修改 YAML。层号从 0 开始。
 - `--n-samples` 是每题采样次数，默认仍为 1；多次采样仅用于 judge 模式。
 - `--save-samples` 在输出目录写入 `calibration_judge_samples.jsonl`，每行对应一个扫描点，包含层、维度、系数、逐题回答、特质评分和该点平均连贯性。同时写入 `run_meta.json`，记录配置、实际扫描参数、模型软件版本、评委设置、数据哈希和运行状态。
-- `--reuse-baseline` 只在本次运行内复用同维度的零注入结果；逐题记录中的 `baseline_reused` 和 `source_layer` 标明复用关系。复用记录不能计为独立重复样本。
-- 两个开关默认关闭；原有 CSV 路径、列和旧命令行为保持兼容。运行前备份同名 CSV、逐题文件和 `run_meta.json`，因为本次运行会覆盖它们。
+- `--reuse-baseline` 只在本次运行内复用同维度、同测量极点的零注入结果；逐题记录中的 `baseline_reused` 和 `source_layer` 标明复用关系。复用记录不能计为独立重复样本。
+- 两个开关默认关闭；原有 CSV 路径和五列含义保持不变，C6 在末尾追加 `pole` 列。运行前备份同名 CSV、逐题文件和 `run_meta.json`，因为本次运行会覆盖它们。
 - 示例包含 ±0.6 的边界检查点，不表示这些系数已通过连贯性验证。当前前 10 道评测题仅用于校准。
+
+#### C6：低极测量
+
+```bash
+python experiments/e0_calibrate.py --mode judge --config configs/main.yaml \
+  --layers 16 --dims C N --coefs -0.2 0 --pole low \
+  --n-samples 3 --save-samples --reuse-baseline
+```
+
+- `--pole high` 是默认行为；`low` 使用低极自己的评测题和评分提示，例如 C 的 careless、N 的 calm。分数越高越体现所选极点；系数的物理方向不变。
+- `--pole both` 分别生成并评分高、低极题目，产生两组结果，生成和评分量相应增加。两极使用各自的零注入基线。
+- CSV 末列与样本记录中的 `pole` 为 `high` 或 `low`；样本另记 `trait_name`，元数据记录对应题库哈希。
+- 推荐层按两极分别计算：高极为最大系数分减最小系数分，低极反向计算。该输出仍是扫描建议，不代表 E0 正式验收。
+- MCQ 保持高特质选项概率的原有含义，`--pole low/both` 仅用于 judge 模式。本任务未改生成长度，仍按配置使用 200 tokens；长度与停止原因改动属于 C20。
 
 ### E1：单段经历能否写成向量（第 2 周）
 

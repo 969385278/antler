@@ -18,16 +18,19 @@ from ..traits.data import BIG_FIVE, load_trait
 
 def trait_score(model, tok, judge, dim: str, *, steer=None, n_questions: int = 20, n_samples: int = 1,
                 max_new_tokens: int = 200, temperature: float = 1.0, seed: int = 0,
-                with_coherence: bool = True, system: str | None = None) -> dict:
-    """维度 dim 的特质分：用高极点的评测题和评分提示（分数越高越偏向高极）。"""
-    pole = BIG_FIVE[dim][0]
-    data = load_trait(pole, "eval")
+                with_coherence: bool = True, system: str | None = None, pole: str = "high") -> dict:
+    """使用指定极点自己的评测题和提示；分数越高越体现该极点，不翻转注入方向。"""
+    if pole not in ("high", "low"):
+        raise ValueError("pole 必须是 high 或 low")
+    trait_name = BIG_FIVE[dim][0 if pole == "high" else 1]
+    data = load_trait(trait_name, "eval")
     qs = data["questions"][:n_questions] * n_samples
     prompts = [chat_prompt(tok, q, system=system) for q in qs]
     answers = generate(model, tok, prompts, steer=steer, max_new_tokens=max_new_tokens,
                        temperature=temperature, seed=seed)
     ts = judge.trait_scores(data["eval_prompt"], qs, answers)
-    out = {"dim": dim, "trait": _mean(ts), "n_valid": sum(t is not None for t in ts)}
+    out = {"dim": dim, "pole": pole, "trait_name": trait_name,
+           "trait": _mean(ts), "n_valid": sum(t is not None for t in ts)}
     if with_coherence:
         out["coherence"] = _mean(judge.coherence_scores(qs, answers))
     out["samples"] = [{"q": q, "a": a, "trait": t} for q, a, t in zip(qs, answers, ts)]

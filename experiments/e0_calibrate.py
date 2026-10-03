@@ -4,8 +4,8 @@
   --mode judge  生成回答 + 评委打分（默认，和论文一致，花 API 费用）
   --mode mcq    用 TRAIT 选择题直接读概率（不需要评委，便宜；需要先运行 scripts/prepare_trait.py）
 
-输出 calibration_<mode>.csv，以及每个维度推荐的层：效果 = 分数(+最大系数) − 分数(−最大系数)，
-同时要求生成模式下连贯性 ≥ 阈值。
+输出 calibration_<mode>.csv，按维度和测量极点分别推荐层。高极效果为最大系数分减最小系数分，
+低极效果反向计算；同时要求生成模式下连贯性 ≥ 阈值。
 """
 import csv
 import hashlib
@@ -30,6 +30,8 @@ from antler.traits.vectors import load_directions, steer_vector
 
 def add_arguments(ap):
     ap.add_argument("--mode", choices=["judge", "mcq"], default="judge")
+    ap.add_argument("--pole", choices=["high", "low", "both"], default="high",
+                    help="测量高极、低极或分别测两极（低极和双极仅用于 judge 模式）")
     ap.add_argument("--dims", nargs="*", default=DIMS)
     ap.add_argument("--mcq-per-dim", type=int, default=100)
     ap.add_argument("--min-coherence", type=float, default=75)
@@ -54,7 +56,14 @@ def scan_settings(args, cfg, count):
         raise ValueError("每题采样次数必须大于 0")
     if args.mode == "mcq" and (args.save_samples or args.n_samples != 1):
         raise ValueError("--save-samples 和多次采样仅适用于 judge 模式")
+    if args.mode == "mcq" and args.pole != "high":
+        raise ValueError("--pole low/both 需要使用 judge 模式和对应极点的评测题")
     return layers, coefs
+
+
+def measurement_poles(args):
+    """双极测量分别生成两组题的回答，不把同一回答换提示重评分。"""
+    return ["high", "low"] if args.pole == "both" else [args.pole]
 
 
 def _redacted(value):
@@ -83,7 +92,8 @@ def record_run(args, cfg, judge, layers, coefs):
 
     now = lambda: datetime.now(timezone.utc).isoformat()
     state = git("status", "--porcelain")
-    files = [KIT / "trait_eval" / f"{BIG_FIVE[k][0]}.json" for k in args.dims]
+    files = [KIT / "trait_eval" / f"{BIG_FIVE[k][0 if pole == 'high' else 1]}.json"
+             for k in args.dims for pole in measurement_poles(args)]
     files += [cfg["out_path"] / "directions.pt"]
     meta = {"git_commit": git("rev-parse", "HEAD"), "git_dirty": bool(state) if state is not None else None,
             "config_path": args.config, "config": _redacted({k: v for k, v in cfg.items() if k != "out_path"}),
@@ -92,7 +102,8 @@ def record_run(args, cfg, judge, layers, coefs):
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             "judge": _redacted({k: getattr(judge, k, None) for k in ("model", "base_url", "max_tokens", "extra_body")}),
             "seed": 0, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
-            "dims": args.dims, "reuse_baseline": args.reuse_baseline,
+            "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args),
+            "reuse_baseline": args.reuse_baseline,
             "data_hashes": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.exists()}}
     path = cfg["out_path"] / "run_meta.json"
 
@@ -121,7 +132,8 @@ def main():
         raise ValueError("judge 模式需要启用评委，请检查 use_judge 和评委环境变量")
     D = load_directions(cfg["out_path"] / "directions.pt")
     U, s = D["U"], D["s"]
-    print(f"[扫描] 层 {layers}，系数 {coefs}，维度 {args.dims}，模式 {args.mode}")
+    poles = measurement_poles(args)
+    print(f"[扫描] 层 {layers}，系数 {coefs}，维度 {args.dims}，模式 {args.mode}，测量极点 {poles}")
 
     mcq_items = {}
     if args.mode == "mcq":
@@ -134,64 +146,73 @@ def main():
 
     out_csv = cfg["out_path"] / f"calibration_{args.mode}.csv"
     samples_path = cfg["out_path"] / f"calibration_{args.mode}_samples.jsonl"
-    # 基线缓存仅在本次运行中有效，不会跨配置复用旧结果。
+    # 基线按维度和极点分别缓存；不同极点使用不同题目，不能互相复用。
     baselines = {}
     results = []
     sample_file = open(samples_path, "w", encoding="utf-8", newline="\n") if args.save_samples else nullcontext(None)
     with record_run(args, cfg, judge, layers, coefs), sample_file as sf, open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["layer", "dim", "coef", "trait", "coherence"])
+        # 新字段追加在末尾，保留原有五列的位置和含义。
+        w.writerow(["layer", "dim", "coef", "trait", "coherence", "pole"])
         for l in layers:
-            for i, k in enumerate(args.dims):
+            for k in args.dims:
                 ki = DIMS.index(k)
-                for c in coefs:
-                    z = torch.zeros(len(DIMS))
-                    z[ki] = c
-                    steer = None if c == 0 else {l: steer_vector(U[l], float(s[l]), z)}
-                    reused = args.reuse_baseline and c == 0 and k in baselines
-                    if reused:
-                        r, source_layer = baselines[k]
-                        trait, coh = r["trait"], r.get("coherence")
-                    elif args.mode == "judge":
-                        r = trait_score(model, tok, judge, k, steer=steer, n_questions=cfg.get("calib_questions", 10),
-                                        max_new_tokens=cfg.get("max_new_tokens", 200), n_samples=args.n_samples)
-                        trait, coh = r["trait"], r.get("coherence")
-                    else:
-                        probs = mcq_high_prob(model, tok, mcq_items[k], steer=steer)
-                        trait, coh = 100 * sum(probs) / len(probs), None
-                        r = {"trait": trait, "coherence": coh}
-                    if not reused:
-                        source_layer = l
-                        if args.reuse_baseline and c == 0:
-                            baselines[k] = (r, l)
-                    if sf is not None:
-                        # 复用的基线仍写完整记录，并标明来源，不能当作独立重复样本。
-                        record = {"layer": l, "dim": k, "coef": c, "n_samples": args.n_samples,
-                                  "baseline_reused": reused, "source_layer": source_layer,
-                                  "result": r}
-                        sf.write(json.dumps(record, ensure_ascii=False) + "\n")
-                        sf.flush()
-                    w.writerow([l, k, c, trait, coh])
-                    f.flush()
-                    results.append((l, k, c, trait, coh))
-                    print(f"  layer {l:2d} {k} coef {c:+.2f}: trait={trait} coherence={coh}")
+                for pole in poles:
+                    baseline_key = (k, pole)
+                    for c in coefs:
+                        z = torch.zeros(len(DIMS))
+                        z[ki] = c
+                        steer = None if c == 0 else {l: steer_vector(U[l], float(s[l]), z)}
+                        reused = args.reuse_baseline and c == 0 and baseline_key in baselines
+                        if reused:
+                            r, source_layer = baselines[baseline_key]
+                            trait, coh = r["trait"], r.get("coherence")
+                        elif args.mode == "judge":
+                            r = trait_score(model, tok, judge, k, steer=steer, pole=pole,
+                                            n_questions=cfg.get("calib_questions", 10),
+                                            max_new_tokens=cfg.get("max_new_tokens", 200), n_samples=args.n_samples)
+                            trait, coh = r["trait"], r.get("coherence")
+                        else:
+                            probs = mcq_high_prob(model, tok, mcq_items[k], steer=steer)
+                            trait, coh = 100 * sum(probs) / len(probs), None
+                            r = {"trait": trait, "coherence": coh}
+                        if not reused:
+                            source_layer = l
+                            if args.reuse_baseline and c == 0:
+                                baselines[baseline_key] = (r, l)
+                        if sf is not None:
+                            # 复用的基线仍写完整记录，并标明来源，不能当作独立重复样本。
+                            record = {"layer": l, "dim": k, "coef": c, "pole": pole,
+                                      "trait_name": BIG_FIVE[k][0 if pole == "high" else 1],
+                                      "n_samples": args.n_samples, "baseline_reused": reused,
+                                      "source_layer": source_layer, "result": r}
+                            sf.write(json.dumps(record, ensure_ascii=False) + "\n")
+                            sf.flush()
+                        w.writerow([l, k, c, trait, coh, pole])
+                        f.flush()
+                        results.append((l, k, c, trait, coh, pole))
+                        print(f"  layer {l:2d} {k} {pole} coef {c:+.2f}: trait={trait} coherence={coh}")
 
-    print("\n每个维度的推荐注入层（效果最大且连贯）：")
+    print("\n每个维度与测量极点的推荐注入层（效果最大且连贯）：")
     cmax, cmin = max(coefs), min(coefs)
     for k in args.dims:
-        best = None
-        for l in layers:
-            hi = [r for r in results if r[0] == l and r[1] == k and r[2] == cmax]
-            lo = [r for r in results if r[0] == l and r[1] == k and r[2] == cmin]
-            if not hi or not lo or hi[0][3] is None or lo[0][3] is None:
-                continue
-            cohs = [r[4] for r in results if r[0] == l and r[1] == k and r[4] is not None]
-            if cohs and min(cohs) < args.min_coherence:
-                continue
-            eff = hi[0][3] - lo[0][3]
-            if best is None or eff > best[1]:
-                best = (l, eff)
-        print(f"  {k}: " + (f"layer {best[0]}，效果 {best[1]:.1f}" if best else "没有满足连贯性要求的层，缩小系数后重试"))
+        for pole in poles:
+            best = None
+            for l in layers:
+                group = [r for r in results if r[0] == l and r[1] == k and r[5] == pole]
+                hi = [r for r in group if r[2] == cmax]
+                lo = [r for r in group if r[2] == cmin]
+                if not hi or not lo or hi[0][3] is None or lo[0][3] is None:
+                    continue
+                cohs = [r[4] for r in group if r[4] is not None]
+                if cohs and min(cohs) < args.min_coherence:
+                    continue
+                eff = hi[0][3] - lo[0][3]
+                if pole == "low":
+                    eff = -eff
+                if best is None or eff > best[1]:
+                    best = (l, eff)
+            print(f"  {k} {pole}: " + (f"layer {best[0]}，效果 {best[1]:.1f}" if best else "没有满足连贯性要求的层，缩小系数后重试"))
     print(f"\n完整结果：{out_csv}")
     if args.save_samples:
         print(f"逐点回答与评分：{samples_path}")
