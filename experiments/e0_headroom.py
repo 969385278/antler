@@ -97,7 +97,7 @@ def run(args):
                     z = torch.zeros(5); z[DIMS.index(args.dim)] = coefficient
                     vector = (steer_vector_poles(pole_vectors, float(s[args.layer]), z) if args.axis == 'pole'
                               else steer_vector(U[args.layer], float(s[args.layer]), z))
-                    result = trait_score(model, tok, judge, args.dim, pole=pole, system=system,
+                    result = trait_score(model, tok, judge, args.dim, pole=pole, system=system, split='calib',
                                          steer=None if coefficient == 0 else {args.layer: vector},
                                          n_questions=10, n_samples=args.n_samples, max_new_tokens=320, with_task=True)
                     sf.write(json.dumps({'coef': coefficient, 'pole': pole, 'result': result}, ensure_ascii=False) + '\n'); sf.flush()

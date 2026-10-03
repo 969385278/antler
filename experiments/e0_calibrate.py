@@ -33,6 +33,8 @@ def add_arguments(ap):
     ap.add_argument("--mode", choices=["judge", "mcq"], default="judge")
     ap.add_argument("--axis", choices=["bipolar", "pole"], default="bipolar",
                     help="注入使用双极轴或按符号选择的单极向量；测量极点仍由 --pole 指定")
+    ap.add_argument("--split", choices=["calib", "test", "all"], default="calib",
+                    help="默认仅校准题；test只用于锁定方案后的正式测量，all仅兼容旧测量")
     ap.add_argument("--pole", choices=["high", "low", "both"], default="high",
                     help="测量高极、低极或分别测两极（低极和双极仅用于 judge 模式）")
     ap.add_argument("--dims", nargs="*", default=DIMS)
@@ -63,6 +65,8 @@ def scan_settings(args, cfg, count):
         raise ValueError("--save-samples 和多次采样仅适用于 judge 模式")
     if args.mode == "mcq" and args.pole != "high":
         raise ValueError("--pole low/both 需要使用 judge 模式和对应极点的评测题")
+    if args.mode == "mcq" and args.split != "calib":
+        raise ValueError("--split 仅用于 judge 题库，不能改变MCQ题目切分")
     if args.mode == "mcq" and (args.with_task or args.max_new_tokens is not None):
         raise ValueError("--with-task 和 --max-new-tokens 仅适用于 judge 模式")
     if args.mode == "judge":
@@ -121,7 +125,7 @@ def record_run(args, cfg, judge, layers, coefs):
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             "judge": _redacted({k: getattr(judge, k, None) for k in ("model", "base_url", "max_tokens", "extra_body")}),
             "seed": 0, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
-            "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args), "axis": args.axis,
+            "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args), "axis": args.axis, "split": args.split,
             "max_new_tokens": generation_limit(args, cfg) if args.mode == "judge" else None,
             "with_task": args.with_task,
             "task_score_validation": "unvalidated" if args.with_task else "not_enabled",
@@ -217,7 +221,7 @@ def main():
                             r, source_layer = baselines[baseline_key]
                             trait, coh = r["trait"], r.get("coherence")
                         elif args.mode == "judge":
-                            r = trait_score(model, tok, judge, k, steer=steer, pole=pole,
+                            r = trait_score(model, tok, judge, k, steer=steer, pole=pole, split=args.split,
                                             n_questions=cfg.get("calib_questions", 10),
                                             max_new_tokens=generation_limit(args, cfg), n_samples=args.n_samples,
                                             with_task=args.with_task)
@@ -232,7 +236,7 @@ def main():
                                 baselines[baseline_key] = (r, l)
                         if sf is not None:
                             # 复用的基线仍写完整记录，并标明来源，不能当作独立重复样本。
-                            record = {"layer": l, "dim": k, "coef": c, "pole": pole, "axis": args.axis,
+                            record = {"layer": l, "dim": k, "coef": c, "pole": pole, "axis": args.axis, "split": args.split,
                                       "trait_name": BIG_FIVE[k][0 if pole == "high" else 1],
                                       "n_samples": args.n_samples, "baseline_reused": reused,
                                       "max_new_tokens": generation_limit(args, cfg), "with_task": args.with_task,

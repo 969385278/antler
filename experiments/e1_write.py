@@ -59,9 +59,9 @@ def main():
             row["behavior"] = {}
             for k in ep["intended"]:
                 base_sys = MEMORY_TEMPLATE.format(experience=NEUTRAL_MEMORY) if args.baseline == "neutral" else BASE_SYSTEM  # 行为测量用第 1 条中性记忆
-                base = trait_score(model, tok, judge, k, n_questions=10, with_coherence=False, system=base_sys)
-                ctx = trait_score(model, tok, judge, k, n_questions=10, with_coherence=False, system=mem)
-                inj = trait_score(model, tok, judge, k, steer=steer, n_questions=10, system=base_sys)
+                base = trait_score(model, tok, judge, k, n_questions=10, with_coherence=False, system=base_sys, split="test")
+                ctx = trait_score(model, tok, judge, k, n_questions=10, with_coherence=False, system=mem, split="test")
+                inj = trait_score(model, tok, judge, k, steer=steer, n_questions=10, system=base_sys, split="test")
                 row["behavior"][k] = {"baseline": base["trait"], "in_context": ctx["trait"],
                                       "injected": inj["trait"], "coherence": inj["coherence"]}
                 print(f"    {k}: 基线 {base['trait']}  上下文 {ctx['trait']}  注入 {inj['trait']}")
