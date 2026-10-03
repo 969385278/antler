@@ -1173,7 +1173,7 @@ Do AI Personas Grow?（Wang et al., 2026）整理了 11 类生活事件后人类
 |-|-|-|-|
 | C2 | P0 | `e0_calibrate`：保存每个点生成的回答；coef = 0 的基线每个维度只测一次；增加 `--layers`、`--coefs`、`--n-samples` 参数 | E0 第 4 步之前 |
 | C3 | P0 | `run_meta.json`；在 `vectors/` 写 meta 并做一致性检查；E1 文件名带上方法和对照组 | 尽早 |
-| C4 | P0 | `experiments/e0_analyze.py`：读取 csv，计算单调性和 Δ，按统一规则选层，画图，输出候选层的 G_ℓ；分半信度作为可选项 | E0 第 3 步之后 |
+| C4 | P0 | `experiments/e0_analyze.py`：读取 csv，计算单调性和 Δ，按统一规则选层，画图，输出候选层的 G_ℓ；`e0_crosstalk.py`按8.3第5步测行为矩阵；分半信度作为可选项 | E0 第 3 步之后 |
 | C1 | P0 | 评测集切分：`trait_score(..., split="calib"|"test"|"all")`；E0 用 calib，E1 及以后用 test；附测试 | E0 第 6 步、E1 之前 |
 | C6 | **P0** | 低极测量：`trait_score(..., pole="high"|"low")`，`pole="low"` 时使用低极的评测题和 `eval_prompt`；`e0_calibrate` 增加 `--pole high|low|both`（默认 high，保持兼容）；CSV 增加 `pole` 列，样本文件记录 pole | 8.8 节诊断之前 |
 | C17 | **P0** | `experiments/e0_extract_coherence.py`：对 `vectors/<极点>_samples.json` 补打连贯性分（`--poles` 可选，默认 dependable careless nervous calm），按极点和 pos/neg 输出平均连贯性、连贯性 < 50 的比例，写入 `outputs/main/extract_coherence.json`；逐条分数另存，不改动原 samples 文件 | 8.8 D-A |
@@ -1374,6 +1374,8 @@ Do AI Personas Grow?（Wang et al., 2026）整理了 11 类生活事件后人类
 | 2026-10-03 | C15增加默认seed=0的显式种子参数和留档；验证固定batch下采样可复现，尚未实现batch解耦 | 4bcbdb5；三次采样不等于三个种子 |
 | 2026-10-03 | C8实现按题目聚合的bootstrap、配对区间、Wilson与BH；C4增加CSV曲线、逐方向数字筛选、Gram矩阵及可选绘图 | 42695c8、6f4a1ac、9fdd23a；数字筛选不声明正式E0通过 |
 | 2026-10-03 | C5实现固定学科分层的MMLU选项logit检查，支持双极和单极注入 | f214bba；对同一抽样比较零注入与候选条件 |
+
+| 2026-10-03 | C4补齐行为串扰运行器：行=测量维度、列=单独正向注入维度，五组基线复用；五个正系数必须显式指定，默认calib，沿用320 token与原评委 | 脚本完成不等于矩阵已运行；待候选范围确定后登记具体系数再执行 |
 
 ## 附录 B：实验日志模板
 
