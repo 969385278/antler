@@ -12,7 +12,7 @@ import transformers
 from _common import parse_args, setup
 from antler.config import ROOT
 from antler.core.model import load_model
-from antler.eval.capability import stratified_sample, mmlu_accuracy
+from antler.eval.capability import stratified_sample, mmlu_accuracy, capability_summary
 from antler.traits.data import DIMS, BIG_FIVE
 from antler.traits.vectors import steer_vector, steer_vector_poles
 from e0_diagnostics import now, sha256, write_json
@@ -81,9 +81,9 @@ def run(args):
         write_json(out / 'baseline.json', baseline)
         injected = mmlu_accuracy(model,tok,sample,steer={args.layer:vector},batch_size=args.batch_size)
         write_json(out / 'injected.json', injected)
-        loss = 100*(baseline['accuracy']-injected['accuracy'])
-        write_json(out / 'summary.json', {'baseline': baseline['accuracy'], 'injected': injected['accuracy'],
-                                         'loss_percentage_points':loss, 'within_2pp':loss<=2})
+        summary = capability_summary(baseline, injected)
+        loss = summary['loss_percentage_points']
+        write_json(out / 'summary.json', summary)
         if any(sha256(Path(p)) != h for p,h in meta['data_hashes'].items()):
             raise RuntimeError('实验期间输入发生变化')
         meta['status'] = 'completed'

@@ -55,3 +55,27 @@ def mmlu_accuracy(model, tok, rows, *, steer=None, batch_size=16):
                             'answer': int(row['answer']), 'prediction': prediction,
                             'correct': prediction == int(row['answer'])})
     return {'accuracy': sum(r['correct'] for r in results)/len(results), 'n': len(results), 'samples': results}
+
+
+def capability_summary(baseline, injected):
+    """核验同题对照，用整数计数判断≤2个百分点，避免浮点边界误判。"""
+    left, right = baseline['samples'], injected['samples']
+    n = len(left)
+    if not n or len(right) != n or baseline['n'] != n or injected['n'] != n:
+        raise ValueError('能力对照需要相同非零样本数')
+    for samples in (left, right):
+        if len({r['source_index'] for r in samples}) != n:
+            raise ValueError('能力对照包含重复题目')
+        for row in samples:
+            if (not isinstance(row['correct'], bool) or row['answer'] not in range(4)
+                    or row['prediction'] not in range(4)
+                    or row['correct'] != (row['answer'] == row['prediction'])):
+                raise ValueError('答对标记与答案、预测不一致')
+    if [(r['source_index'],r['subject'],r['answer']) for r in left] != [
+            (r['source_index'],r['subject'],r['answer']) for r in right]:
+        raise ValueError('能力对照必须使用同一批同序题目及答案')
+    a, b = sum(r['correct'] for r in left), sum(r['correct'] for r in right)
+    return {'baseline': a/n, 'injected': b/n, 'n': n,
+            'baseline_correct': a, 'injected_correct': b,
+            'loss_percentage_points': 100*(a-b)/n,
+            'within_2pp': 100*(a-b) <= 2*n}

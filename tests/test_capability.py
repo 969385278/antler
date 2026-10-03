@@ -4,7 +4,7 @@ import torch
 from transformers import BatchEncoding
 
 from test_core import model
-from antler.eval.capability import stratified_sample, mmlu_accuracy
+from antler.eval.capability import stratified_sample, mmlu_accuracy, capability_summary
 
 
 def rows():
@@ -40,6 +40,7 @@ def test_cpu_logits_and_zero_hook(model):
     assert all(r['prediction']==expected for r in baseline['samples'])
     assert all(not layer._forward_hooks for layer in model.model.layers)
     assert all(not p.requires_grad and p.grad is None for p in model.parameters())
+    assert capability_summary(baseline,injected)['within_2pp']
 
 
 def test_reject_invalid_sampling_and_letter_tokenization(model):
@@ -50,3 +51,31 @@ def test_reject_invalid_sampling_and_letter_tokenization(model):
     tok=Tokenizer(); tok.encode=lambda *a,**kw:[1,2]
     with pytest.raises(ValueError):
         mmlu_accuracy(model,tok,stratified_sample(rows(),3))
+
+
+def _scored(n_correct, total=1400):
+    return {'n':total, 'accuracy':n_correct/total, 'samples':[
+        {'source_index':i,'subject':'test','answer':0,'prediction':0 if i<n_correct else 1,
+         'correct':i<n_correct} for i in range(total)]}
+
+
+@pytest.mark.parametrize('correct,passes', [(933,True),(932,True),(931,False),(961,True)])
+def test_exact_two_percentage_point_boundary(correct,passes):
+    summary=capability_summary(_scored(960),_scored(correct))
+    assert summary['within_2pp'] is passes
+    assert summary['loss_percentage_points']==100*(960-correct)/1400
+    assert summary['baseline_correct']==960 and summary['injected_correct']==correct
+    if correct==932:
+        assert 100*(960/1400-932/1400)>2  # 原实现会误拒绝恰好2点的条件。
+        assert summary['loss_percentage_points']==2
+
+
+@pytest.mark.parametrize('change',['duplicate','answer','prediction','order','count'])
+def test_summary_rejects_incomparable_or_invalid_samples(change):
+    left,right=_scored(960),_scored(932)
+    if change=='duplicate':right['samples'][1]=right['samples'][0]
+    elif change=='answer':right['samples'][0].update(answer=2,prediction=2)
+    elif change=='prediction':right['samples'][0]['prediction']=1
+    elif change=='order':right['samples'].reverse()
+    else:right['n']=1401
+    with pytest.raises(ValueError):capability_summary(left,right)
