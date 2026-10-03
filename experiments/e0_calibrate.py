@@ -26,11 +26,13 @@ from antler.core.model import n_layers
 from antler.eval.judge import COHERENCE_PROMPT, TASK_PROMPT
 from antler.eval.trait_score import mcq_high_prob, trait_score
 from antler.traits.data import BIG_FIVE, DIM_NAMES, DIMS, KIT, load_jsonl
-from antler.traits.vectors import load_directions, steer_vector
+from antler.traits.vectors import load_directions, steer_vector, steer_vector_poles
 
 
 def add_arguments(ap):
     ap.add_argument("--mode", choices=["judge", "mcq"], default="judge")
+    ap.add_argument("--axis", choices=["bipolar", "pole"], default="bipolar",
+                    help="注入使用双极轴或按符号选择的单极向量；测量极点仍由 --pole 指定")
     ap.add_argument("--pole", choices=["high", "low", "both"], default="high",
                     help="测量高极、低极或分别测两极（低极和双极仅用于 judge 模式）")
     ap.add_argument("--dims", nargs="*", default=DIMS)
@@ -94,7 +96,7 @@ def _redacted(value):
 @contextmanager
 def record_run(args, cfg, judge, layers, coefs):
     """开启逐题保存时，同时记录本次精测的来源和结束状态。"""
-    if not (args.save_samples or args.with_task or args.max_new_tokens is not None):
+    if not (args.save_samples or args.with_task or args.max_new_tokens is not None or args.axis == "pole"):
         yield
         return
 
@@ -110,6 +112,8 @@ def record_run(args, cfg, judge, layers, coefs):
     files = [KIT / "trait_eval" / f"{BIG_FIVE[k][0 if pole == 'high' else 1]}.json"
              for k in args.dims for pole in measurement_poles(args)]
     files += [cfg["out_path"] / "directions.pt"]
+    if args.axis == "pole":
+        files += [cfg["out_path"] / "vectors" / f"{p}.pt" for k in args.dims for p in BIG_FIVE[k]]
     meta = {"git_commit": git("rev-parse", "HEAD"), "git_dirty": bool(state) if state is not None else None,
             "config_path": args.config, "config": _redacted({k: v for k, v in cfg.items() if k != "out_path"}),
             "argv": sys.argv[1:], "start_time": now(), "end_time": None, "status": "running",
@@ -117,7 +121,7 @@ def record_run(args, cfg, judge, layers, coefs):
             "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             "judge": _redacted({k: getattr(judge, k, None) for k in ("model", "base_url", "max_tokens", "extra_body")}),
             "seed": 0, "layers": layers, "coefs": coefs, "n_samples": args.n_samples,
-            "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args),
+            "dims": args.dims, "pole": args.pole, "poles": measurement_poles(args), "axis": args.axis,
             "max_new_tokens": generation_limit(args, cfg) if args.mode == "judge" else None,
             "with_task": args.with_task,
             "task_score_validation": "unvalidated" if args.with_task else "not_enabled",
@@ -154,6 +158,22 @@ def main():
         raise ValueError("judge 模式需要启用评委，请检查 use_judge 和评委环境变量")
     D = load_directions(cfg["out_path"] / "directions.pt")
     U, s = D["U"], D["s"]
+    pole_vectors = {}
+    if args.axis == "pole":
+        for k in args.dims:
+            for name in BIG_FIVE[k]:
+                vector = torch.load(cfg["out_path"] / "vectors" / f"{name}.pt",
+                                    map_location="cpu", weights_only=True)
+                if vector.shape != (U.shape[0], U.shape[2]) or not torch.isfinite(vector).all():
+                    raise ValueError(f"{name}: 单极向量与双极坐标系形状不一致或数值无效")
+                pole_vectors[name] = vector
+        # 在创建输出文件前验证所有将使用的非零注入，避免错误覆盖已有结果。
+        for layer in layers:
+            for k in args.dims:
+                for coefficient in coefs:
+                    coordinates = torch.zeros(len(DIMS))
+                    coordinates[DIMS.index(k)] = coefficient
+                    steer_vector_poles({p: v[layer] for p, v in pole_vectors.items()}, float(s[layer]), coordinates)
     poles = measurement_poles(args)
     print(f"[扫描] 层 {layers}，系数 {coefs}，维度 {args.dims}，模式 {args.mode}，测量极点 {poles}")
     if args.with_task:
@@ -186,7 +206,12 @@ def main():
                     for c in coefs:
                         z = torch.zeros(len(DIMS))
                         z[ki] = c
-                        steer = None if c == 0 else {l: steer_vector(U[l], float(s[l]), z)}
+                        if c == 0:
+                            steer = None
+                        elif args.axis == "pole":
+                            steer = {l: steer_vector_poles({p: v[l] for p, v in pole_vectors.items()}, float(s[l]), z)}
+                        else:
+                            steer = {l: steer_vector(U[l], float(s[l]), z)}
                         reused = args.reuse_baseline and c == 0 and baseline_key in baselines
                         if reused:
                             r, source_layer = baselines[baseline_key]
@@ -207,7 +232,7 @@ def main():
                                 baselines[baseline_key] = (r, l)
                         if sf is not None:
                             # 复用的基线仍写完整记录，并标明来源，不能当作独立重复样本。
-                            record = {"layer": l, "dim": k, "coef": c, "pole": pole,
+                            record = {"layer": l, "dim": k, "coef": c, "pole": pole, "axis": args.axis,
                                       "trait_name": BIG_FIVE[k][0 if pole == "high" else 1],
                                       "n_samples": args.n_samples, "baseline_reused": reused,
                                       "max_new_tokens": generation_limit(args, cfg), "with_task": args.with_task,

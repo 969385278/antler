@@ -167,3 +167,27 @@ def steer_vector(U_layer: torch.Tensor, s_layer: float, z: torch.Tensor) -> torc
         vec = s_ℓ · Σ_k z_k · u_k
     """
     return s_layer * (z.to(U_layer.dtype) @ U_layer)
+
+
+def steer_vector_poles(pole_vecs_layer: dict[str, torch.Tensor], s_layer: float,
+                       z: torch.Tensor) -> torch.Tensor:
+    """按符号选择单极向量，以 |z| 加权；负系数不再反转低极向量。"""
+    if z.shape != (len(DIMS),) or not torch.isfinite(z).all():
+        raise ValueError("z 必须为五维有限向量")
+    if not math.isfinite(s_layer) or s_layer <= 0:
+        raise ValueError("层尺度必须有限且大于零")
+    reference = next(iter(pole_vecs_layer.values()), None)
+    if reference is None or reference.ndim != 1:
+        raise ValueError("单极向量必须是非空的一维张量字典")
+    result = torch.zeros_like(reference)
+    for i, dim in enumerate(DIMS):
+        coefficient = float(z[i])
+        if coefficient == 0:
+            continue
+        pole = BIG_FIVE[dim][0 if coefficient > 0 else 1]
+        vector = pole_vecs_layer[pole].to(reference)
+        norm = vector.float().norm()
+        if vector.shape != reference.shape or not torch.isfinite(vector).all() or norm <= 1e-8:
+            raise ValueError(f"{pole}: 单极向量形状、数值或范数无效")
+        result += (vector.float() / norm * abs(coefficient)).to(reference.dtype)
+    return s_layer * result
