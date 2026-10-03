@@ -4,7 +4,7 @@ import torch
 from transformers import BatchEncoding
 
 from test_core import model
-from antler.eval.capability import stratified_sample, mmlu_accuracy, capability_summary
+from antler.eval.capability import stratified_sample, mmlu_accuracy, capability_summary, rotate_options
 
 
 def rows():
@@ -79,3 +79,44 @@ def test_summary_rejects_incomparable_or_invalid_samples(change):
     elif change=='order':right['samples'].reverse()
     else:right['n']=1401
     with pytest.raises(ValueError):capability_summary(left,right)
+
+
+def test_rotation_preserves_correct_content_and_balances_positions():
+    import copy
+    original = stratified_sample(rows(), 14)
+    saved = copy.deepcopy(original)
+    for rotation in range(4):
+        shifted = rotate_options(original, rotation)
+        for source, target in zip(original, shifted):
+            assert target['choices'][target['answer']] == source['choices'][source['answer']]
+            assert target['source_index'] == source['source_index']
+            assert target['question'] == source['question']
+        assert rotate_options(shifted, (4-rotation) % 4) == original
+    for index in range(len(original)):
+        assert {rotate_options(original, r)[index]['answer'] for r in range(4)} == set(range(4))
+    assert original == saved and rotate_options(original, 0) == original
+    rotated = rotate_options(original, 1)
+    rotated[0]['choices'][0] = '修改副本'
+    assert original == saved
+
+
+@pytest.mark.parametrize('rotation', [-1, 4, True, 1.5, '1'])
+def test_rotation_rejects_invalid_rotation(rotation):
+    with pytest.raises(ValueError):rotate_options(rows(), rotation)
+
+
+def test_rotation_cpu_zero_hook_and_content_in_prompts(model):
+    class RecordingTokenizer(Tokenizer):
+        def __call__(self, prompts, **kw):
+            self.prompts = list(prompts)
+            return super().__call__(prompts, **kw)
+    sample = rotate_options(stratified_sample(rows(), 3), 1)
+    tok = RecordingTokenizer()
+    baseline = mmlu_accuracy(model, tok, sample)
+    injected = mmlu_accuracy(model, tok, sample,
+                            steer={1:torch.zeros(model.config.hidden_size)})
+    assert all('A. b\nB. c\nC. d\nD. a' in p for p in tok.prompts)
+    assert baseline == injected
+    assert all(r['answer'] == s['answer'] for r,s in zip(baseline['samples'],sample))
+    assert capability_summary(baseline,injected)['loss_percentage_points'] == 0
+    assert all(not layer._forward_hooks for layer in model.model.layers)

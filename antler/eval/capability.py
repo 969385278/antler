@@ -30,6 +30,20 @@ def stratified_sample(rows, total=1400, seed=0):
     return selected
 
 
+def rotate_options(rows, rotation=0):
+    """诊断选项位置敏感性；左移内容并同步答案，不修改原题库。"""
+    if type(rotation) is not int or rotation not in range(4):
+        raise ValueError('选项轮换必须是0至3的整数')
+    result = []
+    for row in rows:
+        choices, answer = row['choices'], row['answer']
+        if len(choices) != 4 or type(answer) is not int or answer not in range(4):
+            raise ValueError('轮换需要四选项和0至3整数答案')
+        result.append({**row, 'choices': list(choices[rotation:]) + list(choices[:rotation]),
+                       'answer': (answer - rotation) % 4})
+    return result
+
+
 @torch.no_grad()
 def mmlu_accuracy(model, tok, rows, *, steer=None, batch_size=16):
     """只在A/B/C/D之间比较logit；提示无示例，结束在助手回答起点。"""

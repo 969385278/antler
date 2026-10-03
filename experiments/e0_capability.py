@@ -12,7 +12,7 @@ import transformers
 from _common import parse_args, setup
 from antler.config import ROOT
 from antler.core.model import load_model
-from antler.eval.capability import stratified_sample, mmlu_accuracy, capability_summary
+from antler.eval.capability import stratified_sample, mmlu_accuracy, capability_summary, rotate_options
 from antler.traits.data import DIMS, BIG_FIVE
 from antler.traits.vectors import steer_vector, steer_vector_poles
 from e0_diagnostics import now, sha256, write_json
@@ -26,6 +26,8 @@ def add_arguments(ap):
     ap.add_argument('--n-questions', type=int, default=1400)
     ap.add_argument('--batch-size', type=int, default=16)
     ap.add_argument('--axis', choices=['bipolar', 'pole'], default='bipolar')
+    ap.add_argument('--option-rotation', type=int, choices=range(4), default=0,
+                    help='选项顺序诊断：左移0至3位；默认0保留正式原顺序')
 
 
 def run(args):
@@ -37,6 +39,8 @@ def run(args):
     for file in files:
         rows.extend(pq.read_table(file).to_pylist())
     sample = stratified_sample(rows, args.n_questions, seed=0)
+    rotation = getattr(args, 'option_rotation', 0)
+    sample = rotate_options(sample, rotation)
     path = cfg['out_path'] / 'directions.pt'
     direction = torch.load(path, map_location='cpu', weights_only=True)
     z = torch.tensor(args.z)
@@ -71,6 +75,9 @@ def run(args):
             'layer': args.layer, 'z': args.z, 'axis': args.axis, 'seed': 0, 'n_questions': len(sample), 'model': cfg['model'],
             'batch_size': args.batch_size, 'data_hashes': {str(p): sha256(p) for p in [*files, path, *vector_files]},
             'scoring': 'zero_shot_chat_ABCD_logits'}
+    meta.update(option_rotation=rotation,
+                option_order=[(i + rotation) % 4 for i in range(4)],
+                measurement_role='canonical_order' if rotation == 0 else 'option_order_diagnostic')
     write_json(out / 'run_meta.json', meta)
     try:
         model, tok = load_model(cfg['model'],cfg.get('dtype','bfloat16'),cfg.get('device','auto'))
@@ -82,6 +89,8 @@ def run(args):
         injected = mmlu_accuracy(model,tok,sample,steer={args.layer:vector},batch_size=args.batch_size)
         write_json(out / 'injected.json', injected)
         summary = capability_summary(baseline, injected)
+        if rotation:
+            summary.update(option_rotation=rotation, replaces_canonical_gate=False)
         loss = summary['loss_percentage_points']
         write_json(out / 'summary.json', summary)
         if any(sha256(Path(p)) != h for p,h in meta['data_hashes'].items()):
