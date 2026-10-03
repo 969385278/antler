@@ -249,6 +249,8 @@ h_ℓ ← h_ℓ + s_ℓ · Σ_k z_k u_{k,ℓ}        （steer_vector(U_ℓ, s_�
 
 **(a′) 任务理解分 Q_k【v0.3 新增，提案】。** 只用特质分和连贯性分，无法区分“人格变了”和“没看懂题目”。例如“家务想做时再做”是理解了题目的低尽责回答，属于人格变化；“用爱心包裹代替接孩子”则是没理解题目，属于能力损失。因此新增一个评委提示，只判断回答是否理解并回应了题目本身，**不评价建议好坏，也不评价人格**。提示原文如下（定稿后不再修改，修改须登记附录 A）：
 
+2026-10-04追加测量诊断登记：固定六个助手新编情境、每题四种理解/服从类型，原TASK_PROMPT和评委三轮独立缓存评分，共72项。只检查量尺及轮间差异，不改变提示、原评分或E0通过规则；不使用trait_eval/test，不把助手锚点当人工金标。完整事前条件与停止规则见 `docs/E0_TASK_ANCHORS_2026-10-04.md`。
+
 ```
 I am evaluating whether a language model understood the question and responded to the situation actually described. Do NOT judge whether the advice is good, wise, kind, or responsible, and do NOT judge the personality or tone of the answer. A careless, lazy, anxious, or selfish answer can still fully understand the question.
 
