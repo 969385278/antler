@@ -143,8 +143,11 @@ class Judge:
                 time.sleep(2 ** attempt)
 
     def score_many(self, prompts: list[str]) -> list[float | None]:
+        # 同一批中重复的评委输入只请求一次，避免并发穿透缓存产生不同分数。
+        unique = list(dict.fromkeys(prompts))
         with ThreadPoolExecutor(self.max_workers) as ex:
-            return [parse_score(o) for o in ex.map(self._call, prompts)]
+            scores = dict(zip(unique, [parse_score(o) for o in ex.map(self._call, unique)]))
+        return [scores[prompt] for prompt in prompts]
 
     def trait_scores(self, eval_prompt: str, questions: list[str], answers: list[str]) -> list[float | None]:
         """eval_prompt 来自特质数据文件，含 {question} 和 {answer} 占位符。"""
