@@ -4,6 +4,7 @@ accelerate
 pyyaml
 numpy
 pandas
+matplotlib             # E0校准曲线绘图
 pyarrow                # parquet files (UltraChat, TRAIT)
 requests
 tqdm
