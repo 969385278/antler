@@ -103,7 +103,8 @@ def test_rejects_invalid_inputs_before_scoring(tmp_path, change):
         rescore.load_inputs([path], ['O'], [-.125])
 
 
-def test_run_uses_fresh_cache_without_model_and_preserves_source(tmp_path, monkeypatch):
+@pytest.mark.parametrize('audit', [False, True])
+def test_run_uses_fresh_cache_without_model_and_preserves_source(tmp_path, monkeypatch, audit):
     path = source(tmp_path/'input')
     before = path.read_bytes()
     cfgpath = tmp_path/'config.yaml'; cfgpath.write_text('use_judge: true\n')
@@ -112,13 +113,18 @@ def test_run_uses_fresh_cache_without_model_and_preserves_source(tmp_path, monke
     def setup(args, **kwargs):
         assert kwargs == {'need_model':False,'need_judge':False}
         return cfg,None,None,None
-    def judge(cache_path):
+    def judge(cache_path, **kwargs):
         assert not Path(cache_path).exists()
+        if audit:
+            assert Path(kwargs['response_audit_path']).parent == Path(cache_path).parent
+            Path(kwargs['response_audit_path']).write_text('{}\n')
+        else:
+            assert not kwargs
         calls.append(cache_path)
         return FakeJudge(cache_path)
     monkeypatch.setattr(rescore, 'setup', setup)
     monkeypatch.setattr(rescore, 'Judge', judge)
-    args = SimpleNamespace(config=str(cfgpath),sources=[str(path)],dims=['O'],coefs=[-.125])
+    args = SimpleNamespace(config=str(cfgpath),sources=[str(path)],dims=['O'],coefs=[-.125],audit_responses=audit)
     first, second = rescore.run(args), rescore.run(args)
     assert first != second and calls[0] != calls[1]
     assert path.read_bytes() == before
@@ -127,6 +133,9 @@ def test_run_uses_fresh_cache_without_model_and_preserves_source(tmp_path, monke
     assert meta['model_loaded'] is False and meta['generation_performed'] is False
     assert meta['cache_initially_empty'] is True
     assert meta['replaces_original_scores'] is False
+    assert meta['audit_responses'] is audit
+    if audit:
+        assert meta['response_audit_sha256'] == rescore.sha256(first/'judge_responses.jsonl')
 
 
 def test_rejects_changed_judge_and_prompts(tmp_path, monkeypatch):

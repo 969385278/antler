@@ -17,6 +17,7 @@ import os
 import re
 import threading
 import time
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -76,9 +77,14 @@ def parse_score(text: str) -> float | None:
     return v if 0 <= v <= 100 else None
 
 
+class ResponseAuditError(RuntimeError):
+    """审计写入失败时停止，避免重复请求掩盖缺失证据。"""
+
+
 class Judge:
     def __init__(self, cache_path: str = "outputs/judge_cache.jsonl", max_workers: int = 8,
-                 base_url: str | None = None, api_key: str | None = None, model: str | None = None):
+                 base_url: str | None = None, api_key: str | None = None, model: str | None = None,
+                 response_audit_path: str | None = None):
         self.base_url = (base_url or os.environ.get("JUDGE_BASE_URL", "")).rstrip("/")
         self.api_key = api_key or os.environ.get("JUDGE_API_KEY", "")
         self.model = model or os.environ.get("JUDGE_MODEL", "")
@@ -97,6 +103,11 @@ class Judge:
             self.extra_body = {}
         self._n_bad = 0
         self.cache_path = Path(cache_path)
+        self.response_audit_path = Path(response_audit_path) if response_audit_path else None
+        if self.response_audit_path is not None:
+            if self.response_audit_path.resolve() == self.cache_path.resolve():
+                raise ValueError("响应审计文件不能与评分缓存相同")
+            self.response_audit_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self._cache: dict[str, str] = {}
         self._lock = threading.Lock()
@@ -109,25 +120,48 @@ class Judge:
     def _key(self, prompt: str) -> str:
         return hashlib.sha256(f"{self.model}\n{prompt}".encode()).hexdigest()
 
+    def _audit_response(self, key, payload, response, body):
+        if self.response_audit_path is None:
+            return
+        choice = body['choices'][0]
+        record = {
+            'received_at': datetime.now(timezone.utc).isoformat(), 'key': key,
+            'request_sha256': hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest(),
+            'requested_model': self.model, 'returned_model': body.get('model'),
+            'response_id': body.get('id'), 'created': body.get('created'),
+            'system_fingerprint': body.get('system_fingerprint'),
+            'request_id': response.headers.get('x-request-id'),
+            'finish_reason': choice.get('finish_reason'),
+            'output': choice['message'].get('content') or '',
+        }
+        try:
+            with self._lock, self.response_audit_path.open('a', encoding='utf-8', newline='\n') as f:
+                f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        except OSError as exc:
+            raise ResponseAuditError('响应审计写入失败；停止请求并保留已有文件') from exc
+
     def _call(self, prompt: str, retries: int = 4) -> str:
         key = self._key(prompt)
         if key in self._cache:
             return self._cache[key]
         for attempt in range(retries):
             try:
+                payload = {"model": self.model, "temperature": 0, "max_tokens": self.max_tokens,
+                           "messages": [{"role": "user", "content": prompt}], **self.extra_body}
                 r = requests.post(f"{self.base_url}/chat/completions",
                                   headers={"Authorization": f"Bearer {self.api_key}"},
-                                  json={"model": self.model, "temperature": 0, "max_tokens": self.max_tokens,
-                                        "messages": [{"role": "user", "content": prompt}], **self.extra_body},
+                                  json=payload,
                                   timeout=60)
                 r.raise_for_status()
-                out = r.json()["choices"][0]["message"].get("content") or ""
+                body = r.json()
+                self._audit_response(key, payload, r, body)
+                out = body["choices"][0]["message"].get("content") or ""
                 if parse_score(out) is None and "REFUSAL" not in out.upper():
                     # 解析失败：不写缓存（否则修好配置后仍会读到坏结果），并打印前几条原始输出方便排查
                     with self._lock:
                         self._n_bad += 1
                         if self._n_bad <= 3:
-                            msg = r.json()["choices"][0]["message"]
+                            msg = body["choices"][0]["message"]
                             think = (msg.get("reasoning_content") or "")[:80]
                             print(f"[评委] 无法解析的输出：{out!r}（模型 {self.model}，max_tokens={self.max_tokens}，"
                                   f"extra={self.extra_body}，思考内容开头={think!r}）")
@@ -137,6 +171,8 @@ class Judge:
                     with open(self.cache_path, "a", encoding="utf-8") as f:
                         f.write(json.dumps({"key": key, "output": out}, ensure_ascii=False) + "\n")
                 return out
+            except ResponseAuditError:
+                raise
             except Exception:
                 if attempt == retries - 1:
                     raise

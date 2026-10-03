@@ -23,6 +23,7 @@ def add_arguments(ap):
     ap.add_argument('--sources', nargs='+', required=True, help='原始calibration_judge_samples.jsonl')
     ap.add_argument('--dims', nargs='+', choices=list(BIG_FIVE), required=True)
     ap.add_argument('--coefs', nargs='+', type=float, required=True)
+    ap.add_argument('--audit-responses', action='store_true', help='保存评委响应身份与请求哈希，默认关闭')
 
 
 def valid_score(value):
@@ -124,11 +125,13 @@ def run(args):
                 raise ValueError('源实验题库哈希缺失或与当前评分提示不一致')
     out = cfg['out_path'] / 'rescore' / (now().replace(':', '').replace('+', '_') + '_' + uuid.uuid4().hex[:8])
     out.mkdir(parents=True, exist_ok=False)
-    judge = Judge(cache_path=str(out/'judge_cache.jsonl'))
+    audit_responses = getattr(args, 'audit_responses', False)
+    judge = Judge(cache_path=str(out/'judge_cache.jsonl'),
+                  **({'response_audit_path': str(out/'judge_responses.jsonl')} if audit_responses else {}))
     judge_identity = {k: getattr(judge, k) for k in ('model', 'base_url', 'max_tokens', 'extra_body')}
     if _redacted(judge_identity) != identity['judge']:
         raise ValueError('当前评委配置与原评委不一致')
-    meta = {'task': 'C8', 'experiment': 'e0_rescore', 'status': 'running', 'start_time': now(),
+    meta = {'task': 'C8', 'experiment': 'e0_rescore', 'audit_responses': audit_responses, 'status': 'running', 'start_time': now(),
             'git_commit': subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
             'git_dirty': bool(subprocess.check_output(['git','status','--porcelain'],cwd=ROOT,text=True).strip()),
             'argv': _redacted(sys.argv[1:]), 'config': _redacted(cfg), 'config_sha256': sha256(Path(args.config)),
@@ -152,6 +155,8 @@ def run(args):
         raise
     finally:
         meta['end_time'] = now()
+        if audit_responses:
+            meta['response_audit_sha256'] = sha256(out/'judge_responses.jsonl') if (out/'judge_responses.jsonl').exists() else None
         write_json(out/'run_meta.json', meta)
     print(f'[结果目录] {out}', flush=True)
     return out
