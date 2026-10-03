@@ -3,7 +3,8 @@
 经历以“记忆”的形式放进系统提示（老师），对比没有这段记忆时（基线），测量或蒸馏出它对人格的影响：
 
 方法 A（投影法，免训练）：
-    δ_k = mean_p [ a_ℓ(p | 经历) − a_ℓ(p) ] · u_k / s_ℓ
+    δ = solve(U Uᵀ, U mean_p [a_ℓ(p | 经历) − a_ℓ(p | 中性记忆)] / s_ℓ)
+  默认用对偶基恢复非正交方向的坐标；projection="dot"保留旧点积法作为对照。
   a_ℓ 取最后一个 prompt token 的激活。得到的方向较可信，但大小 ≠ 注入时需要的大小。
 
 方法 B（蒸馏法，只优化 5 个数）：
@@ -13,6 +14,7 @@
 """
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 
@@ -79,9 +81,53 @@ def _baseline_prompts(tok, probes, baseline: str) -> list[str]:
             for i, p in enumerate(probes)]
 
 
+def projection_coordinates(activation_difference: torch.Tensor, U_layer: torch.Tensor,
+                           s_layer: float, *, projection: str = "dual") -> torch.Tensor:
+    """C7：在五行满秩基中恢复最小二乘坐标；dot保留旧点积对照。
+
+    用float64求解五维Gram方程，不显式求逆，不通过正则项偷偷改变坐标定义。
+    秩不足时对偶坐标不唯一，明确失败。输出沿用float32及U所在设备。
+    """
+    if projection not in ("dual", "dot"):
+        raise ValueError("投影方法必须为dual或dot")
+    if (not isinstance(U_layer, torch.Tensor) or U_layer.ndim != 2
+            or U_layer.shape[0] != len(DIMS) or U_layer.shape[1] < len(DIMS)
+            or not U_layer.is_floating_point() or not torch.isfinite(U_layer).all()):
+        raise ValueError("人格基须为有限浮点数的5×d矩阵，且d至少为5")
+    if (not isinstance(activation_difference, torch.Tensor) or activation_difference.ndim != 1
+            or activation_difference.shape[0] != U_layer.shape[1]
+            or not activation_difference.is_floating_point()
+            or not torch.isfinite(activation_difference).all()):
+        raise ValueError("激活差须为与人格基隐藏维度一致的有限浮点向量")
+    if type(s_layer) not in (int, float) or not math.isfinite(s_layer) or s_layer <= 0:
+        raise ValueError("层尺度必须为有限正数")
+    if projection == "dot":
+        # 显式对照保持旧float32点积行为，不把它当成非正交基的真实坐标。
+        delta = U_layer.float() @ activation_difference.to(U_layer.device, torch.float32) / s_layer
+        if not torch.isfinite(delta).all():
+            raise ValueError("点积坐标产生非有限值")
+        return delta
+    basis = U_layer.to(dtype=torch.float64)
+    if int(torch.linalg.matrix_rank(basis)) != len(DIMS):
+        raise ValueError("人格基不满秩，无法唯一恢复五维对偶坐标")
+    difference = activation_difference.to(device=basis.device, dtype=basis.dtype)
+    delta = torch.linalg.solve(basis @ basis.T, basis @ (difference / s_layer))
+    if not torch.isfinite(delta).all():
+        raise ValueError("对偶坐标求解产生非有限值")
+    result = delta.to(dtype=torch.float32)
+    if not torch.isfinite(result).all():
+        raise ValueError("对偶坐标转换为float32后产生非有限值")
+    return result
+
+
 def delta_projection(model, tok, experience: str, probes: list[str], U_layer: torch.Tensor,
-                     s_layer: float, layer: int, baseline: str = "neutral") -> torch.Tensor:
+                     s_layer: float, layer: int, baseline: str = "neutral", *,
+                     projection: str = "dual") -> torch.Tensor:
     """方法 A。U_layer: (5, d) 第 ℓ 层的人格方向。返回 δ (5,)。"""
+    if baseline not in ("neutral", "none"):
+        raise ValueError("对照组必须为neutral或none")
+    if not probes:
+        raise ValueError("写入探针不能为空")
     a_with = last_prompt_acts(model, tok, _prompts(tok, probes, experience), layers=[layer])[:, 0]
     if baseline == "neutral":  # 每道探针都和全部 5 条中性记忆比较，取平均，降低噪声
         a_without = torch.stack([
@@ -91,7 +137,7 @@ def delta_projection(model, tok, experience: str, probes: list[str], U_layer: to
     else:
         a_without = last_prompt_acts(model, tok, _prompts(tok, probes, None), layers=[layer])[:, 0]
     d = (a_with - a_without).mean(0)                     # (d,)
-    return (U_layer.float() @ d) / s_layer
+    return projection_coordinates(d, U_layer, s_layer, projection=projection)
 
 
 def _seq_logprobs(model, prompt_ids, resp_ids, steer=None):

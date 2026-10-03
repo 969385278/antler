@@ -25,6 +25,8 @@ def main():
         ap.add_argument("--distill", action="store_true")
         ap.add_argument("--behavior", action="store_true")
         ap.add_argument("--experiences", default="data/pilot_experiences.jsonl")
+        ap.add_argument("--projection", choices=["dual", "dot"], default="dual",
+                        help="方法A读出：dual=对偶基（C7默认），dot=旧点积对照")
         ap.add_argument("--baseline", choices=["neutral", "none"], default="neutral",
                         help="对照组：neutral=中性记忆（推荐），none=无记忆（会混入格式效应）")
     args = parse_args(extra)
@@ -36,7 +38,8 @@ def main():
 
     report, hitsA, hitsB, tot = [], 0, 0, 0
     for ep in eps:
-        dA = delta_projection(model, tok, ep["text"], probes, U_l, s_l, args.layer, baseline=args.baseline)
+        dA = delta_projection(model, tok, ep["text"], probes, U_l, s_l, args.layer,
+                              baseline=args.baseline, projection=args.projection)
         h, n = sign_agreement(dA, ep["intended"])
         hitsA += h
         tot += n
@@ -83,7 +86,8 @@ def main():
           f"比值 {ratio:.1f}（{verdict}）")
     # 去共模后的方向准确率：δ 减去所有经历的平均再判断方向（要求经历集合在各方向上大致平衡）
     hc = sum(sign_agreement(torch.tensor(r["delta_A"]) - common, r["intended"])[0] for r in report)
-    summary = {"layer": args.layer, "baseline": args.baseline, "sign_acc_A": hitsA / tot,
+    summary = {"layer": args.layer, "baseline": args.baseline, "projection": args.projection,
+               "sign_acc_A": hitsA / tot,
                "sign_acc_A_centered": hc / tot, "common_mode_A": common.tolist(), "spread_A": float(spread)}
     if args.distill:
         allB = torch.tensor([r["delta_B"] for r in report])
