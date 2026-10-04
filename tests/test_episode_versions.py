@@ -62,3 +62,21 @@ def test_copied_rejected_old_text_cannot_be_a_new_version():
     args[3][0]['text'] = args[0][1]['text']
     with pytest.raises(ValueError, match='复制'):
         select_versions(*args)
+
+
+def test_invalid_response_is_preserved_and_never_coerced_to_a_label():
+    args = list(inputs())
+    identity = args[4].pop()['id']
+    invalid = [{'id': identity, 'reason': 'O值为2，未改为1', 'response_sha256': 'a'*64}]
+    result = select_versions(*args, invalid_annotations=invalid)
+    assert len(result['selected']) == 1
+    assert result['counts']['new_annotation_invalid'] == 1
+
+
+def test_invalid_annotation_cannot_also_be_valid_or_lack_provenance():
+    args = list(inputs())
+    identity = args[4][0]['id']
+    invalid = [{'id': identity, 'reason': '错误', 'response_sha256': 'a'*64}]
+    with pytest.raises(ValueError): select_versions(*args, invalid_annotations=invalid)
+    args[4].clear(); invalid[0]['response_sha256'] = 'missing'
+    with pytest.raises(ValueError): select_versions(*args, invalid_annotations=invalid)

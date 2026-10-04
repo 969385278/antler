@@ -13,3 +13,5 @@
 输出按照原280槽位顺序提供selected及ledger，记录old_retained/new_selected/无新候选/新标签或结构失败。该组件解决版本唯一性，不验证60段方向盲审，也不宣告正式数据或E1完成，formal_ready始终false。
 
 这不是绕过原跨批合并的重复槽位保护：原盲包映射仍必须各自核验，旧标签和新标签归档分开保存，调用端须先审计每批来源哈希。没有按Qwen结果选择文本的入口。
+
+本批出现O=2非法响应后，新增默认空的invalid_annotations参数。每条须带原始响应SHA和原因，不能同时出现在有效标签中，台账记new_annotation_invalid且不纳入。不会改成符号、置空标签或自动重问；详见D1_REPLACEMENT_REVIEW_2026-10-04.md。
