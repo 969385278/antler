@@ -4,7 +4,7 @@
 
 当前dev九臂网格已完成前四段、36/90条件。此时登记之后的独立探针复测；不声称在看到任何dev结果之前已决定。只检验同一经历换拟合探针后的坐标稳定性，不用A/B余弦代替重复测量，不替代正式test、消融或行为迁移。
 
-当前GPU运行保持不变。新复测尚未执行；采集入口仍须完成、通过CPU单元测试并在原网格完成和审计后才运行。本登记锁定探针和预算，不能把准备组件当实测证据。
+当前GPU运行保持不变。新复测尚未执行；采集入口已实现，须通过CPU单元测试并在原网格完成和审计后才运行。本登记锁定探针和预算，不能把准备组件当实测证据。
 
 ## 固定输入
 
@@ -34,4 +34,31 @@
 
 ## 准备代码
 
-`antler/memory/e1_probe_repeat.py`只生成固定探针计划；测试覆盖顺序不敏感、原题隔离、规范化重复、来源错误、配额不足。真实采集与结果尚未完成。
+`antler/memory/e1_probe_repeat.py`只生成固定探针计划；测试覆盖顺序不敏感、原题隔离、规范化重复、来源错误、配额不足。真实采集与结果尚未完成。采集入口为`experiments/e1_probe_repeat.py`，默认只核验完整参考网格；只有`--execute`才加载模型并进行复测。
+
+
+## 采集入口的运行约束
+
+入口重新核验参考run_meta终态、全部产物哈希、十段九臂、固定参数、坐标维度及有限性、逐段结果与汇总一致性；不接受局部快照。随后重新计算既定选参规则，不接受用户手填学习率。原方向与单位、提取题来源和冻结探针计划逐一绑定。
+
+模型文件须与原dev中途封存的11文件指纹一致；此检查不追溯证明原运行开始时的文件状态，也不证明官方上游真实性。实际拟合保持权重冻结。共有留出题老师prompt、prompt token、回答文本、回答token、五条中性提示及停止原因逐项比较，任何变化保留现场并停止，不把该差异解释为单纯换探针导致。
+
+每个封存计划仅允许一个实际运行claim，错误时也保留，不能不经审计重复运行。输出包括逐段老师回答、tensor语料、激活差、新A及B结果、两方法原/复测坐标包及稳定性统计、运行元数据和产物哈希。`formal_e1_pass`与`behavior_validated`保持false。
+
+在当前90条件完成、终态审计归档、代码部署与输入复制后，于服务器仓库根目录执行：
+
+```bash
+python -u experiments/e1_probe_repeat.py \
+  --config configs/main.yaml \
+  --reference-run outputs/main/e1_kl_dev/31f70d1cb5874f7f9b3791f99eaa6d6a \
+  --directions outputs/main/directions.pt \
+  --experiences outputs/analysis/e1_dev_optimization_20261004/episodes.json \
+  --probe-plan outputs/analysis/e1_probe_repeat_20261004/probe_plan.json \
+  --model-fingerprint outputs/analysis/e1_model_fingerprint_20261004T045329Z.json
+```
+
+这是只读预检命令，通过后使用完全相同参数加`--execute`。不能在当前网格仍运行时pull更新服务器源码，因为当前进程持续核对来源哈希。
+
+## 采集入口验证记录
+
+CPU全套1007 passed，88.10秒，无模型下载。专项测试使用tests/test_core.py随机微型模型，检查未完成参考拒绝、文件被改拒绝、默认不加载模型、新A初始化而非旧B热启动、完整十段坐标比较、老师token变化时在拟合前停止、失败归档与重复claim阻止。真实Qwen复测尚未执行。
