@@ -95,7 +95,8 @@ def agreement(a, b):
     return result
 
 
-def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256, *, split_plan=None):
+def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256, *, split_plan=None,
+                    allow_extra_dimensions=False):
     validate_candidates(rows, allow_grouped=split_plan is not None)
     if split_plan is not None:
         validate_split_plan(rows, split_plan)
@@ -113,10 +114,18 @@ def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256, *,
     for identity in mapping:
         row = original[mapping[identity]]
         entry = {**row, 'dataset': 'D1', 'labels': {'llm_a': a[identity], 'llm_b': b[identity], 'human': None}}
-        if a[identity] == b[identity] == row['intended']:
+        strict = a[identity] == b[identity] == row['intended']
+        target_match = bool(row['intended']) and all(
+            a[identity].get(d) == b[identity].get(d) == sign for d, sign in row['intended'].items())
+        if allow_extra_dimensions:
+            entry.update(label_policy='target_signs_with_extras_v1', strict_label_match=strict,
+                         extra_labels={name: {d: s for d, s in labels.items() if d not in row['intended']}
+                                       for name, labels in [('llm_a', a[identity]), ('llm_b', b[identity])]})
+        if strict or (allow_extra_dimensions and target_match):
             accepted.append(entry)
         else:
-            rejected.append({**entry, 'reason': '独立标签未同时与预期完全一致'})
+            rejected.append({**entry, 'reason': '目标符号未同时一致或中性标签不为空' if allow_extra_dimensions
+                             else '独立标签未同时与预期完全一致'})
     stratum = lambda r: next(iter(r['intended'])) + str(next(iter(r['intended'].values()))) if len(r['intended']) == 1 else ('neutral' if not r['intended'] else 'multi')
     quotas = {dim + str(sign): 20 for dim in DIMS for sign in (-1, 1)} | {'neutral': 40, 'multi': 40}
     counts = Counter(stratum(r) for r in accepted)

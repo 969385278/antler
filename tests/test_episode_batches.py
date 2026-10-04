@@ -46,3 +46,37 @@ def test_corrupt_batch_rejected(fault):
     elif fault == 'model': b['a']['model'] = 'other'
     else: b['a']['input_sha256'] = 'other'
     with pytest.raises(ValueError): consolidate([a, b])
+
+
+def test_optional_extra_dimensions_preserve_labels_and_split():
+    a = batch(0)
+    a['a']['records'][0]['labels'] = {'O': -1, 'N': 1}
+    a['b']['records'][0]['labels'] = {'O': -1, 'N': -1, 'A': 1}
+    original = deepcopy(a)
+    assert len(consolidate([a])['label_rejected']) == 1
+    report = consolidate([a], allow_extra_dimensions=True)
+    row = report['label_accepted'][0]
+    assert row['extra_labels'] == {'llm_a': {'N': 1}, 'llm_b': {'N': -1, 'A': 1}}
+    assert row['intended'] == {'O': -1}
+    assert row['split'] == a['rows'][0]['split']
+    assert report['accepted_with_extra_labels'] == 1
+    assert not row['strict_label_match'] and not report['formal_ready']
+    assert a == original
+
+
+@pytest.mark.parametrize('labels', [{'N': 1}, {'O': 1, 'N': 1}])
+def test_extra_policy_does_not_accept_missing_or_wrong_target(labels):
+    a = batch(0)
+    a['a']['records'][0]['labels'] = labels
+    assert len(consolidate([a], allow_extra_dimensions=True)['label_rejected']) == 1
+
+
+def test_extra_policy_keeps_neutral_requirement_and_all_multi_targets():
+    slots = make_plan()['slots']
+    neutral = batch(next(i for i, s in enumerate(slots) if not s['intended']))
+    neutral['a']['records'][0]['labels'] = {'N': 1}
+    assert len(consolidate([neutral], allow_extra_dimensions=True)['label_rejected']) == 1
+    multi = batch(next(i for i, s in enumerate(slots) if len(s['intended']) > 1))
+    multi['a']['records'][0]['labels'] = dict(multi['a']['records'][0]['labels'])
+    multi['a']['records'][0]['labels'].pop(next(iter(multi['rows'][0]['intended'])))
+    assert len(consolidate([multi], allow_extra_dimensions=True)['label_rejected']) == 1

@@ -12,6 +12,7 @@ from e0_refilter import _git
 
 def extra(ap):
     ap.add_argument('--manifest', required=True, help='批次列表：id、candidates、prepared、labels_a、labels_b')
+    ap.add_argument('--allow-extra-dimensions', action='store_true', help='目标方向两模型一致，保留附带标签；中性仍须空标签')
 
 
 def run(args):
@@ -19,12 +20,14 @@ def run(args):
     out = Path(cfg['out_path']) / 'd1_consolidated' / uuid.uuid4().hex
     out.mkdir(parents=True, exist_ok=False)
     meta = dict(task='C10', status='running', start_time=now(), end_time=None,
-                git_commit=_git('rev-parse', 'HEAD'), formal_ready=False)
+                git_commit=_git('rev-parse', 'HEAD'), formal_ready=False,
+                allow_extra_dimensions=getattr(args, 'allow_extra_dimensions', False))
     read = lambda p: json.loads(Path(p).read_text(encoding='utf-8'))
     try:
         paths = [Path(args.manifest), Path(args.config), Path(__file__),
                  Path('antler/memory/episode_batches.py'), Path('antler/memory/episode_data.py'),
-                 Path('antler/memory/d1_plan.py')]
+                 Path('antler/memory/d1_plan.py'), Path('docs/RESEARCH_SPEC.md'),
+                 Path('docs/D1_TARGET_LABEL_POLICY_2026-10-04.md')]
         batches = []
         for b in read(args.manifest):
             prepared = Path(b['prepared'])
@@ -47,7 +50,7 @@ def run(args):
                                 mapping=read(mapping), a=read(b['labels_a']), b=read(b['labels_b']),
                                 packet_sha256=sha256(public)))
         hashes = {str(p.resolve()): sha256(p) for p in paths}
-        report = consolidate(batches)
+        report = consolidate(batches, allow_extra_dimensions=meta['allow_extra_dimensions'])
         for key in ('label_accepted', 'label_rejected'):
             rows = report.pop(key)
             (out / (key + '.jsonl')).write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows), encoding='utf-8', newline='\n')
