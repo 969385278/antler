@@ -961,6 +961,8 @@ python experiments/e1_write.py --layer $L --baseline none          # 对照：�
 
 ### 9.6 E1 正式版设计【提案】
 
+**C11 KL流程pilot登记（2026-10-04，运行前）。** 用原第16层12段pilot、固定30道trait_extract探针前20拟合/后10评估，老师贪心64token只生成一次，全部五条中性对照，比较人格五维/固定随机五维/全维60步拟合。先独立p01流程预检，完整条件及哈希见`docs/E1_KL_PILOT_2026-10-04.md`。不改固定提示、E0冻结条件或行为白名单；不平衡pilot不能替代正式E1。
+
 数据用 D1 的 test 子集；lr 和步数在 dev 子集上确定。
 
 | 条件 | 说明 |
