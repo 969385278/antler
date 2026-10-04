@@ -72,3 +72,37 @@ def test_dry_run_and_http_stop_preserve_claim(tmp_path, monkeypatch):
     assert len(json.loads((out/'not_completed.json').read_text())) == 1
     with pytest.raises(FileExistsError): m.run(args)
     assert len(calls) == 1
+
+
+def remaining_data():
+    from antler.memory.d1_plan import make_plan
+    keep = [{**candidate(s['id'], s['intended']), **s} for s in make_plan()['slots'][:233]]
+    ledger = []
+    by_id = {r['id']: r for r in keep}
+    for s in make_plan()['slots']:
+        r = by_id.get(s['id'])
+        ledger.append({'id': s['id'], 'status': 'old_retained' if r else 'new_label_rejected',
+                       'text_sha256': hashlib.sha256(r['text'].encode()).hexdigest() if r else 'a'*64})
+    return {'selected': keep, 'ledger': ledger}
+
+
+def test_remaining_round_preserves_233_and_binds_47():
+    from antler.memory.episode_replacement import remaining_slots
+    source = remaining_data(); before = deepcopy(source)
+    keep, slots = remaining_slots(source)
+    assert source == before and keep == source['selected']
+    assert len(slots) == 47 and all(s['replacement_round'] == 2 for s in slots)
+    assert all(s['previous_text_sha256'] == 'a'*64 for s in slots)
+    assert not {s['id'] for s in slots} & {r['id'] for r in keep}
+
+
+@pytest.mark.parametrize('fault', ['text', 'status', 'missing', 'duplicate', 'split'])
+def test_remaining_rejects_changed_ledger(fault):
+    from antler.memory.episode_replacement import remaining_slots
+    source = remaining_data()
+    if fault == 'text': source['ledger'][0]['text_sha256'] = 'b'*64
+    elif fault == 'status': source['ledger'][0]['status'] = 'new_label_rejected'
+    elif fault == 'missing': source['ledger'].pop()
+    elif fault == 'duplicate': source['ledger'].append(source['ledger'][0])
+    else: source['selected'][0]['split'] = 'train'
+    with pytest.raises(ValueError): remaining_slots(source)

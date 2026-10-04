@@ -5,7 +5,7 @@ from pathlib import Path
 import uuid
 
 from _common import parse_args, setup
-from antler.memory.episode_replacement import replacement_slots
+from antler.memory.episode_replacement import replacement_slots, remaining_slots
 from antler.memory.episode_data import normalize
 from d1_annotate import read_connection
 from d1_generate import generate_one
@@ -26,8 +26,9 @@ SUFFIX = (' The narrator is a digital AI with no body, relatives, classmates, pe
 
 
 def extra(ap):
-    ap.add_argument('--source', required=True, help='已完成新口径合并目录')
-    ap.add_argument('--review', required=True, help='追加结构复核文件')
+    ap.add_argument('--source', help='已完成新口径合并目录')
+    ap.add_argument('--review', help='追加结构复核文件')
+    ap.add_argument('--selection', help='第二轮：已封存233保留/47缺额选择台账')
     ap.add_argument('--env-file', default='.env')
     ap.add_argument('--execute', action='store_true', help='实际请求；默认只准备并展示缺额')
 
@@ -62,8 +63,31 @@ def load(source, review_path):
 
 def run(args):
     cfg, _, _, _ = setup(args, need_model=False, need_judge=False)
-    source, review_path = Path(args.source).resolve(), Path(args.review).resolve()
-    old, keep, slots, hashes = load(source, review_path)
+    selection_arg = getattr(args, 'selection', None)
+    round_id = 2 if selection_arg else 1
+    if selection_arg:
+        if args.source or args.review:
+            raise ValueError('selection与source/review不能同时使用')
+        source = review_path = Path(selection_arg).resolve()
+        if sha256(source) != '7b12e43c5b2ffa1ec4c734938d05565d0527dd6661db44d1dd3b461644a6ad89':
+            raise ValueError('第二轮台账不是登记版本')
+        selection = json.loads(source.read_text(encoding='utf-8'))
+        hashes = dict(selection['source_hashes'])
+        if any(sha256(p) != h for p, h in hashes.items()):
+            raise ValueError('第二轮台账来源哈希错误')
+        hashes[str(source)] = sha256(source)
+        keep, slots = remaining_slots(selection)
+        old = list(keep)
+        # 所有旧机械合格原文用于重复检查，不传入生成提示。
+        for name in hashes:
+            p = Path(name)
+            if p.name in ('new_candidates.jsonl', 'label_accepted.jsonl', 'label_rejected.jsonl'):
+                old.extend(json.loads(line) for line in p.read_text(encoding='utf-8').splitlines() if line.strip())
+    else:
+        if not args.source or not args.review:
+            raise ValueError('原入口需要source及review')
+        source, review_path = Path(args.source).resolve(), Path(args.review).resolve()
+        old, keep, slots, hashes = load(source, review_path)
     print(f'[版本补写] 保留{len(keep)}，缺额{len(slots)}，实际请求={args.execute}', flush=True)
     if not args.execute:
         return None
@@ -80,12 +104,12 @@ def run(args):
              Path('antler/memory/d1_plan.py'), Path('antler/memory/episode_data.py'),
              Path('experiments/d1_generate.py'), Path('experiments/d1_recover.py'),
              Path('experiments/d1_annotate.py'), Path('docs/RESEARCH_SPEC.md'),
-             Path('docs/D1_REPLACEMENT_2026-10-04.md')]
+             Path('docs/D1_REPLACEMENT_2026-10-04.md'), Path('docs/D1_REMAINING_PROPOSAL_2026-10-04.md')]
     hashes.update({str(p.resolve()): sha256(p) for p in paths})
     meta = dict(task='C10', status='running', start_time=now(), end_time=None,
                 git_commit=_git('rev-parse', 'HEAD'), source=str(source), review=str(review_path),
-                data_hashes=hashes, max_requests=98, completed_requests=0, workers=1,
-                seconds_between_requests=5, replacement_round=1, retries=0, formal_ready=False,
+                data_hashes=hashes, max_requests=len(slots), completed_requests=0, workers=1,
+                seconds_between_requests=5, replacement_round=round_id, retries=0, formal_ready=False,
                 model=conf['MODEL'], endpoint=conf['endpoint'])
     save = lambda: write_json(out / 'run_meta.json', meta)
     save(); write_json(out / 'request_order.json', [s['id'] for s in slots])
@@ -97,9 +121,9 @@ def run(args):
         meta.update(completed_requests=len(current), new_valid=sum(r['valid'] for r in current))
         save()
         if len(current) % 10 == 0:
-            print(f'[版本补写] {len(current)}/98，机械合格{meta["new_valid"]}', flush=True)
+            print(f'[版本补写] {len(current)}/{len(slots)}，机械合格{meta["new_valid"]}', flush=True)
     def generate(slot, conf, out, **kwargs):
-        return generate_one(slot, conf, out, prompt_suffix=kwargs['prompt_suffix'] + SUFFIX, attempt=3)
+        return generate_one(slot, conf, out, prompt_suffix=kwargs['prompt_suffix'] + SUFFIX, attempt=round_id + 2)
     try:
         collect(slots, conf, out, {normalize(r['text']) for r in old}, generate=generate,
                 digital_role=True, on_result=on_result)
