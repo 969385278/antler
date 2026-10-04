@@ -83,3 +83,28 @@ def test_hook_cleanup_after_teacher_shape_failure(model):
     with pytest.raises(ValueError, match='词表'):
         evaluate_kl(model, [smaller_vocab], layer=2, vector=torch.ones(D))
     assert all(not layer._forward_hooks for layer in get_layers(model))
+
+
+@pytest.mark.parametrize('basis', [torch.eye(5, D), None])
+def test_opt_in_diagnostics_measure_full_fit_and_actual_update_without_changing_fit(model, basis):
+    fit = [item(model, 'fit1', torch.ones(D) * .02), item(model, 'fit2', torch.arange(D).float() * .001)]
+    heldout = [item(model, 'heldout')]
+    size = D if basis is None else 5
+    init = torch.ones(size) * .001
+    initial_vector = 2 * (init if basis is None else init @ basis)
+    kwargs = dict(basis=basis, scale=2., layer=2, steps=1, probes_per_step=1, lr=.001, init=init)
+    plain = fit_and_evaluate(model, fit, heldout, **kwargs)
+    measured = fit_and_evaluate(model, fit, heldout, **kwargs, diagnostics=True)
+    assert 'diagnostics' not in plain
+    assert torch.equal(plain['coordinates'], measured['coordinates'])
+    assert plain['final'] == measured['final']
+    d = measured['diagnostics']
+    assert d['fit_final'] == evaluate_kl(model, fit, layer=2, vector=measured['vector'])
+    assert d['fit_initial'] == evaluate_kl(model, fit, layer=2, vector=initial_vector)
+    assert d['fit_baseline'] == evaluate_kl(model, fit, layer=2)
+    assert d['fit_final']['n_probes'] == 2
+    expected = float((measured['vector'] - initial_vector).norm())
+    assert d['step_metrics'][0]['vector_update_norm'] == pytest.approx(expected)
+    assert d['step_metrics'][0]['vector_update_norm_over_scale'] == pytest.approx(expected / 2)
+    assert d['parameter_count'] == size and d['optimizer']['lr'] == .001
+    assert all(p.grad is None for p in model.parameters())

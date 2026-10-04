@@ -75,7 +75,8 @@ def evaluate_kl(model, items, *, layer, vector=None):
 
 
 def fit_and_evaluate(model, fit_items, eval_items, *, basis, scale, layer,
-                     steps=60, lr=.02, lam=1e-3, probes_per_step=4, seed=0, init=None):
+                     steps=60, lr=.02, lam=1e-3, probes_per_step=4, seed=0, init=None,
+                     diagnostics=False):
     """只在fit探针拟合，最后一次更新后完整评估留出集。
 
     basis为k×d；None直接优化d维，不构造巨大单位矩阵。正则为注入向量/s的平方范数，
@@ -106,10 +107,20 @@ def fit_and_evaluate(model, fit_items, eval_items, *, basis, scale, layer,
     params.requires_grad_(True)
     vector = lambda: scale * (params if basis is None else params @ basis)
     zero = evaluate_kl(model, eval_items, layer=layer)
+    diagnostic = None
+    if diagnostics:
+        initial_vector = vector().detach().clone()
+        diagnostic = {'initial_vector_norm': float(initial_vector.norm()),
+                      'parameter_count': size, 'hidden_size': hidden,
+                      'fit_baseline': evaluate_kl(model, fit_items, layer=layer),
+                      'fit_initial': evaluate_kl(model, fit_items, layer=layer, vector=initial_vector),
+                      'heldout_initial': evaluate_kl(model, eval_items, layer=layer, vector=initial_vector),
+                      'step_metrics': []}
     optimizer = torch.optim.Adam([params], lr=lr)
     rng = random.Random(seed)
     history = []
     for step in range(steps):
+        before_vector = vector().detach().clone() if diagnostics else None
         batch = rng.sample(fit_items, min(probes_per_step, len(fit_items)))
         optimizer.zero_grad()
         total = 0.
@@ -120,14 +131,29 @@ def fit_and_evaluate(model, fit_items, eval_items, *, basis, scale, layer,
                 total += float(loss.detach())
         penalty = lam * (vector() / scale).square().sum()
         penalty.backward()
+        grad_norm = float(params.grad.detach().norm()) if diagnostics else None
         optimizer.step()
         if not torch.isfinite(params).all():
             raise ValueError('优化产生非有限坐标')
         history.append({'step': step, 'fit_minibatch_kl_before_update': total})
+        if diagnostics:
+            after_vector = vector().detach()
+            diagnostic['step_metrics'].append({'step': step,
+                'parameter_gradient_norm': grad_norm,
+                'vector_update_norm': float((after_vector - before_vector).norm()),
+                'vector_update_norm_over_scale': float((after_vector - before_vector).norm()) / scale,
+                'vector_norm_after_update': float(after_vector.norm()),
+                'regularizer_before_update': float(penalty.detach())})
     final_vector = vector().detach()
     final = evaluate_kl(model, eval_items, layer=layer, vector=final_vector)
-    return {'coordinates': params.detach().cpu(), 'vector': final_vector.cpu(), 'baseline': zero,
+    result = {'coordinates': params.detach().cpu(), 'vector': final_vector.cpu(), 'baseline': zero,
             'final': final, 'explained': (zero['kl'] - final['kl']) / zero['kl'] if zero['kl'] > 0 else None,
             'history': history, 'fit_probes': [i.probe for i in fit_items],
             'evaluation_probes': [i.probe for i in eval_items], 'steer_phase': 'all',
             'regularizer': 'squared_norm_of_vector_over_scale', 'behavior_validated': False}
+    if diagnostics:
+        diagnostic['fit_final'] = evaluate_kl(model, fit_items, layer=layer, vector=final_vector)
+        diagnostic['optimizer'] = {'name': 'Adam', 'lr': lr, 'eps': optimizer.param_groups[0]['eps'],
+                                   'betas': optimizer.param_groups[0]['betas']}
+        result['diagnostics'] = diagnostic
+    return result
