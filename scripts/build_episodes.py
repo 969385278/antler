@@ -6,7 +6,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'experiments'))
 from _common import parse_args, setup
-from antler.memory.episode_data import BANNED, blind_packet, merge_and_split
+from antler.memory.episode_data import BANNED, blind_packet, merge_and_split, validate_split_plan
 from antler.traits.data import load_jsonl
 from e0_diagnostics import now, sha256, write_json
 from e0_refilter import _git
@@ -17,6 +17,7 @@ def extra(ap):
     ap.add_argument('--prepared', help='已准备的盲标目录；合并时必须给出')
     ap.add_argument('--labels-a')
     ap.add_argument('--labels-b')
+    ap.add_argument('--split-plan', help='生成前冻结的D1情境家族切分计划')
 
 
 def jsonl(path, rows):
@@ -34,7 +35,12 @@ def run(args):
         inputs = [Path(args.candidates), Path(args.config), Path(__file__),
                   Path('antler/memory/episode_data.py'), Path('docs/D1_DATA_PIPELINE_2026-10-04.md')]
         rows = load_jsonl(args.candidates)
-        public, mapping = blind_packet(rows)
+        plan_path = getattr(args, 'split_plan', None)
+        plan = json.loads(Path(plan_path).read_text(encoding='utf-8')) if plan_path else None
+        if plan is not None:
+            validate_split_plan(rows, plan)
+            inputs.append(Path(plan_path))
+        public, mapping = blind_packet(rows, allow_grouped=plan is not None)
         jsonl(out / 'blind.jsonl', public)
         write_json(out / 'private_mapping.json', mapping)
         write_json(out / 'banned_words.json', sorted(BANNED))
@@ -47,7 +53,7 @@ def run(args):
             inputs += [prepared / 'blind.jsonl', prepared / 'private_mapping.json', Path(args.labels_a), Path(args.labels_b)]
             read = lambda p: json.loads(Path(p).read_text(encoding='utf-8'))
             result = merge_and_split(rows, load_jsonl(prepared / 'blind.jsonl'), read(prepared / 'private_mapping.json'),
-                                     read(args.labels_a), read(args.labels_b), sha256(prepared / 'blind.jsonl'))
+                                     read(args.labels_a), read(args.labels_b), sha256(prepared / 'blind.jsonl'), split_plan=plan)
             jsonl(out / 'accepted.jsonl', result.pop('accepted'))
             jsonl(out / 'rejected.jsonl', result.pop('rejected'))
             write_json(out / 'report.json', result)

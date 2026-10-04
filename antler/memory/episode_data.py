@@ -22,7 +22,7 @@ def label_valid(value):
     return isinstance(value, dict) and set(value) <= set(DIMS) and all(type(v) is int and v in (-1, 1) for v in value.values())
 
 
-def validate_candidates(rows, judge_vendor='deepseek'):
+def validate_candidates(rows, judge_vendor='deepseek', *, allow_grouped=False):
     """机械检查不代表故事语义合格，结构和人格方向仍由独立盲标复核。"""
     seen_ids, seen_texts = set(), set()
     if not rows:
@@ -49,14 +49,14 @@ def validate_candidates(rows, judge_vendor='deepseek'):
         if not isinstance(vendor, str) or not vendor.strip() or vendor.strip().casefold() == judge_vendor.casefold():
             raise ValueError('生成厂商缺失或与主评委相同')
         # 本阶段只接收独立经历；语义变体须另行登记分组后再切分，不能跨split混入。
-        if any(row.get(k) is not None for k in ('group_id', 'twin_id', 'paraphrase_of')):
+        if any(row.get(k) is not None for k in ('twin_id', 'paraphrase_of')) or (row.get('group_id') is not None and not allow_grouped):
             raise ValueError('有关联经历须另行分组划分，当前入口拒绝独立切分')
         seen_ids.add(identity); seen_texts.add(normalize(text))
 
 
-def blind_packet(rows):
+def blind_packet(rows, *, allow_grouped=False):
     """公开id不编码维度或方向，映射留在独立文件；按固定seed打乱。"""
-    validate_candidates(rows)
+    validate_candidates(rows, allow_grouped=allow_grouped)
     shuffled = sorted(rows, key=lambda r: r['id'])
     random.Random(0).shuffle(shuffled)
     public, mapping = [], {}
@@ -95,15 +95,17 @@ def agreement(a, b):
     return result
 
 
-def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256):
-    validate_candidates(rows)
+def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256, *, split_plan=None):
+    validate_candidates(rows, allow_grouped=split_plan is not None)
+    if split_plan is not None:
+        validate_split_plan(rows, split_plan)
     if (bundle_a.get('vendor', '').strip().casefold(), bundle_a.get('model', '').strip().casefold()) == (
             bundle_b.get('vendor', '').strip().casefold(), bundle_b.get('model', '').strip().casefold()):
         raise ValueError('必须提供两个不同模型的独立标签')
     a = validate_labels(bundle_a, public, packet_sha256)
     b = validate_labels(bundle_b, public, packet_sha256)
     # 映射必须来自相同候选，而非事后把标签换到另一段文本。
-    expected_public, expected_mapping = blind_packet(rows)
+    expected_public, expected_mapping = blind_packet(rows, allow_grouped=split_plan is not None)
     if public != expected_public or mapping != expected_mapping:
         raise ValueError('盲标文本或映射已改变')
     original = {r['id']: r for r in rows}
@@ -119,7 +121,11 @@ def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256):
     quotas = {dim + str(sign): 20 for dim in DIMS for sign in (-1, 1)} | {'neutral': 40, 'multi': 40}
     counts = Counter(stratum(r) for r in accepted)
     complete = counts == Counter(quotas)
-    if complete:
+    if split_plan is not None:
+        planned = {r['id']: r['split'] for r in split_plan['slots']}
+        for row in accepted:
+            row['split'] = planned[row['id']]
+    elif complete:
         for key, total in quotas.items():
             group = sorted((r for r in accepted if stratum(r) == key), key=lambda r: r['id'])
             random.Random('D1-v1-seed0-' + key).shuffle(group)
@@ -129,3 +135,17 @@ def merge_and_split(rows, public, mapping, bundle_a, bundle_b, packet_sha256):
             'quota_complete': complete, 'formal_ready': False, 'human_review_complete': False,
             'agreement': agreement(list(a.values()), [b[k] for k in a]),
             'note': '机械检查与两模型一致不等于人工盲审完成；多维逐维标签分布须另报。'}
+
+
+def validate_split_plan(rows, plan):
+    """分组版只接受生成前固定的计划，不在看到标签后移动样本。"""
+    from .d1_plan import make_plan
+    if plan != make_plan():
+        raise ValueError('槽位计划与冻结的D1-v1不一致')
+    slots = {s['id']: s for s in plan['slots']}
+    for row in rows:
+        slot = slots.get(row['id'])
+        if slot is None or row.get('group_id') != slot['group_id'] or row['intended'] != slot['intended']:
+            raise ValueError('候选身份、预期或情境家族不符合槽位计划')
+        if row.get('split', slot['split']) != slot['split']:
+            raise ValueError('候选split与预先计划冲突')
