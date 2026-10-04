@@ -78,4 +78,25 @@ def summarize(rows):
         report['semantic'][method] = {'per_dimension': counts, 'hits': sum(v['hits'] for v in counts.values()),
                                      'total_labels': 16, 'independent_episode_count': 12, 'per_episode': per_episode,
                                      'rank_ties': '相同绝对值并列；排序与符号正确性分开报告'}
+    agreement = []
+    for row in rows:
+        a = np.asarray(row['delta_A'], dtype=np.float64)
+        b = np.asarray(row['arms']['personality']['coordinates'], dtype=np.float64)
+        # 先缩放再归一化，避免有限但很大的坐标导致平方溢出。
+        def unit(v):
+            scale = np.max(np.abs(v))
+            if scale == 0:
+                return None
+            v = v / scale
+            return v / np.linalg.norm(v)
+        ua, ub = unit(a), unit(b)
+        cosine = None if ua is None or ub is None else float(np.clip(ua @ ub, -1., 1.))
+        agreement.append({'id': row['id'], 'coordinate_cosine': cosine})
+    report['A_B_agreement'] = {
+        'space': 'OCEAN_coordinates_in_units_of_s',
+        'per_episode': agreement,
+        'coordinate_cosine': _distribution([r['coordinate_cosine'] for r in agreement]),
+        'zero_vector_policy': '任一零向量的余弦未定义，保留该经历并报告缺失数',
+        'interpretation': 'B以A初始化；一致性不代表独立复现或跨探针稳定性',
+    }
     return report

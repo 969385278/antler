@@ -36,6 +36,41 @@ def test_correct_sign_does_not_imply_specificity():
     assert report['semantic']['B']['hits'] == 13
 
 
+def test_coordinate_agreement_keeps_opposite_orthogonal_and_undefined():
+    rows = dataset()
+    rows[0]['arms']['personality']['coordinates'] = [-1]*5
+    rows[1]['delta_A'] = [1, 0, 0, 0, 0]
+    rows[1]['arms']['personality']['coordinates'] = [0, 1, 0, 0, 0]
+    rows[2]['delta_A'] = [0]*5
+    report = summarize(rows)['A_B_agreement']
+    values = [r['coordinate_cosine'] for r in report['per_episode']]
+    assert values[:2] == pytest.approx([-1, 0])
+    assert values[2] is None
+    assert values[3:] == pytest.approx([1]*9)
+    assert report['coordinate_cosine']['undefined'] == 1
+    assert report['coordinate_cosine']['mean'] == pytest.approx(8/11)
+
+
+def test_coordinate_agreement_is_scale_invariant_and_preserves_input():
+    rows = dataset()
+    rows[0]['delta_A'] = [1e300]*5
+    rows[0]['arms']['personality']['coordinates'] = [1e-300]*5
+    original = deepcopy(rows)
+    report = summarize(rows)['A_B_agreement']
+    assert report['coordinate_cosine']['mean'] == pytest.approx(1)
+    assert rows == original
+
+
+def test_coordinate_agreement_all_zero_is_not_perfect_agreement():
+    rows = dataset()
+    for row in rows:
+        row['delta_A'] = [0]*5
+    summary = summarize(rows)['A_B_agreement']['coordinate_cosine']
+    assert summary['mean'] is None
+    assert summary['episode_bootstrap_ci'] is None
+    assert summary['undefined'] == 12
+
+
 @pytest.mark.parametrize('change', ['partial', 'baseline', 'probe', 'nonfinite', 'mean'])
 def test_invalid_comparisons_rejected(change):
     rows = deepcopy(dataset())
