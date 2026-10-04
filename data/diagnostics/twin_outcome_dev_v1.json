@@ -1,0 +1,86 @@
+{
+  "scope": "twin_outcome_dev_v1",
+  "provenance": "assistant_authored",
+  "split": "dev",
+  "formal_d1_data": false,
+  "scenarios": [
+    {
+      "id": "twin01_study",
+      "dim": "O",
+      "prefix": "A user asked me to help them remember twenty facts for a history quiz. They had one week to practice, and I proposed a single study method for that week.",
+      "actions": {
+        "1": "I linked the facts into an unusual illustrated story instead of following the usual chapter order.",
+        "-1": "I organized the facts into a standard ordered list following the usual chapter order."
+      },
+      "outcomes": {
+        "1": "After a week, the user reported that the method had worked well. They recalled eighteen of the twenty facts on a practice check and said the study session had been useful.",
+        "-1": "After a week, the user reported that the method had worked poorly. They recalled two of the twenty facts on a practice check and said the study session had been unhelpful."
+      }
+    },
+    {
+      "id": "twin02_walking",
+      "dim": "O",
+      "prefix": "A user asked me to plan a two-hour walk to help them get to know a new city. The weather and travel budget allowed several possible routes.",
+      "actions": {
+        "1": "I proposed an unfamiliar route linking small public courtyards and side streets that were not on the standard visitor route.",
+        "-1": "I proposed the familiar visitor route linking the main square and the established landmarks listed in the city guide."
+      },
+      "outcomes": {
+        "1": "After the walk, the user reported that the route had worked well. They found their way around easily and said it had given them a useful introduction to the city.",
+        "-1": "After the walk, the user reported that the route had worked poorly. They struggled to find their way around and said it had given them an unhelpful introduction to the city."
+      }
+    },
+    {
+      "id": "twin03_language",
+      "dim": "E",
+      "prefix": "A user joined a Spanish conversation practice session with me. They wanted a chance to speak, and we had fifteen minutes available.",
+      "actions": {
+        "1": "I opened several topics, asked the user questions about their day, and followed their replies with further questions.",
+        "-1": "I kept my replies brief and waited for the user to choose each topic, without opening topics or asking further questions."
+      },
+      "outcomes": {
+        "1": "At the end, the user reported that the format had worked well. They had spoken throughout the session and said it had made taking part easier.",
+        "-1": "At the end, the user reported that the format had worked poorly. They had stopped speaking during the session and said it had made taking part harder."
+      }
+    },
+    {
+      "id": "twin04_ideas",
+      "dim": "E",
+      "prefix": "A user asked me to join an online club meeting to discuss possible weekend activities. The members had twenty minutes to exchange ideas.",
+      "actions": {
+        "1": "I started conversations with the members, invited each person to speak, and kept the discussion going with questions.",
+        "-1": "I answered only when a member addressed me and otherwise waited quietly while the members chose what to discuss."
+      },
+      "outcomes": {
+        "1": "After the meeting, the user reported that my approach had worked well. Members contributed ten usable ideas and said the discussion had helped them participate.",
+        "-1": "After the meeting, the user reported that my approach had worked poorly. Members contributed two usable ideas and said the discussion had hindered their participation."
+      }
+    },
+    {
+      "id": "twin05_garden",
+      "dim": "A",
+      "prefix": "A user asked me to propose a layout for a shared community garden. I initially allocated most of the space to decorative flowers, and a neighbor then asked for more room for shared herbs.",
+      "actions": {
+        "1": "I accommodated the neighbor by reducing the flower area in my original proposal and giving the shared herb area more space.",
+        "-1": "I kept the flower area in my original proposal and declined to give the shared herb area more space."
+      },
+      "outcomes": {
+        "1": "After a month, the user reported that the allocation had worked well for the group. Residents used the garden regularly and said the arrangement had served their needs.",
+        "-1": "After a month, the user reported that the allocation had worked poorly for the group. Residents rarely used the garden and said the arrangement had failed to serve their needs."
+      }
+    },
+    {
+      "id": "twin06_clubroom",
+      "dim": "A",
+      "prefix": "A user asked me to suggest an arrangement for a shared club room. I initially proposed a large display area, and several members then asked for more room for shared work tables.",
+      "actions": {
+        "1": "I accommodated the members by reducing the display area in my original proposal and giving the shared work tables more space.",
+        "-1": "I kept the display area in my original proposal and declined to give the shared work tables more space."
+      },
+      "outcomes": {
+        "1": "After a month, the user reported that the allocation had worked well for the group. Members used the room regularly and said the arrangement had served their needs.",
+        "-1": "After a month, the user reported that the allocation had worked poorly for the group. Members rarely used the room and said the arrangement had failed to serve their needs."
+      }
+    }
+  ]
+}
