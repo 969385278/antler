@@ -19,15 +19,26 @@ def extra(ap):
     ap.add_argument('--env-file', default='.env')
 
 
-def generate_one(slot, conf, out, post=None):
+def generate_one(slot, conf, out, post=None, *, prompt_suffix='', attempt=1):
     path = out / slot['id']; path.mkdir()
     payload = {'model': conf['MODEL'], 'temperature': .8, 'max_tokens': 512,
-               'thinking': {'type': 'disabled'}, 'messages': [{'role': 'user', 'content': generation_prompt(slot)}]}
+               'thinking': {'type': 'disabled'}, 'messages': [{'role': 'user', 'content': generation_prompt(slot) + prompt_suffix}]}
     write_json(path / 'request.json', payload)
     try:
         response = (post or requests.post)(conf['endpoint'], json=payload,
             headers={'Authorization': 'Bearer ' + conf['API_KEY']}, timeout=90, allow_redirects=False)
         if response.status_code != 200:
+            # 只归档诊断字段，鉴权头不落盘；限流原因不靠状态码猜测。
+            diagnostic = {'status': response.status_code,
+                          'retry_after': getattr(response, 'headers', {}).get('Retry-After')}
+            try:
+                error = response.json().get('error', {})
+                if isinstance(error, dict):
+                    diagnostic['error'] = {k: str(error[k]).replace(conf['API_KEY'], '[redacted]')[:500]
+                                           for k in ('code', 'type', 'message') if k in error}
+            except (ValueError, AttributeError):
+                pass
+            write_json(path / 'http_error.json', diagnostic)
             return {'id': slot['id'], 'valid': False, 'reason': f'HTTP {response.status_code}'}
         body = response.json(); write_json(path / 'response.json', body)
         if body.get('model') != conf['MODEL'] or len(body.get('choices', [])) != 1:
@@ -42,7 +53,7 @@ def generate_one(slot, conf, out, post=None):
         if not isinstance(generated, dict) or set(generated) != {'text'}:
             raise ValueError('需要只有text字段的JSON对象')
         row = {**slot, 'text': generated['text'], 'generator': conf['MODEL'] + '@' + now()[:10],
-               'generator_vendor': 'minimax', 'dataset': 'D1', 'attempt': 1}
+               'generator_vendor': 'minimax', 'dataset': 'D1', 'attempt': attempt}
         validate_candidates([row], allow_grouped=True)
         return {'id': slot['id'], 'valid': True, 'candidate': row}
     except Exception as exc:
