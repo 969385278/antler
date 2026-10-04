@@ -74,9 +74,9 @@ def test_dry_run_and_http_stop_preserve_claim(tmp_path, monkeypatch):
     assert len(calls) == 1
 
 
-def remaining_data():
+def remaining_data(count=233):
     from antler.memory.d1_plan import make_plan
-    keep = [{**candidate(s['id'], s['intended']), **s} for s in make_plan()['slots'][:233]]
+    keep = [{**candidate(s['id'], s['intended']), **s} for s in make_plan()['slots'][:count]]
     ledger = []
     by_id = {r['id']: r for r in keep}
     for s in make_plan()['slots']:
@@ -106,3 +106,49 @@ def test_remaining_rejects_changed_ledger(fault):
     elif fault == 'duplicate': source['ledger'].append(source['ledger'][0])
     else: source['selected'][0]['split'] = 'train'
     with pytest.raises(ValueError): remaining_slots(source)
+
+
+def test_third_round_preserves_254_and_binds_26():
+    from antler.memory.episode_replacement import remaining_slots
+    source = remaining_data(254); before = deepcopy(source)
+    keep, slots = remaining_slots(source, round_id=3)
+    assert source == before and keep == source['selected']
+    assert len(slots) == 26 and all(s['replacement_round'] == 3 for s in slots)
+    assert all(s['previous_text_sha256'] == 'a'*64 for s in slots)
+    assert not {s['id'] for s in slots} & {r['id'] for r in keep}
+
+
+@pytest.mark.parametrize('round_id,count', [(2, 254), (3, 233), (4, 254), (True, 254)])
+def test_wrong_round_or_count_rejected(round_id, count):
+    from antler.memory.episode_replacement import remaining_slots
+    with pytest.raises(ValueError): remaining_slots(remaining_data(count), round_id=round_id)
+
+
+def test_third_round_cli_dry_run_and_single_request_failure(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'experiments'))
+    m = importlib.import_module('d1_replace')
+    source = tmp_path / 'selection.json'
+    source.write_text(json.dumps({**remaining_data(254), 'source_hashes': {}}))
+    config = tmp_path / 'config.yaml'; config.write_text('out_dir: test')
+    monkeypatch.setattr(m, 'setup', lambda *a, **k: ({'out_path': tmp_path}, None, None, None))
+    real_sha = m.sha256
+    monkeypatch.setattr(m, 'sha256', lambda p: '3923c0aceee07678efd658c74f702cd038637c3ae8bb774d4e352da197ef5e1d'
+                        if Path(p).resolve() == source.resolve() else real_sha(p))
+    monkeypatch.setattr(m, 'read_connection', lambda *a: {'MODEL': 'MiniMax-M3', 'endpoint': 'https://example.invalid'})
+    calls = []
+    def gen(slot, conf, out, **kwargs):
+        calls.append(slot)
+        (out / slot['id']).mkdir()
+        assert slot['replacement_round'] == 3 and kwargs['attempt'] == 5
+        return {'id': slot['id'], 'valid': False, 'reason': 'HTTP 429'}
+    monkeypatch.setattr(m, 'generate_one', gen)
+    args = SimpleNamespace(config=str(config), source=None, review=None, selection=None,
+                           selection_round3=str(source), env_file='.env', execute=False)
+    assert m.run(args) is None and not calls
+    args.execute = True
+    out = m.run(args)
+    meta = json.loads((out/'run_meta.json').read_text())
+    assert meta['replacement_round'] == 3 and meta['max_requests'] == 26 and meta['status'] == 'stopped'
+    assert len(calls) == 1 and len(json.loads((out/'retained_sources.json').read_text())) == 254
+    with pytest.raises(FileExistsError): m.run(args)
+    assert len(calls) == 1

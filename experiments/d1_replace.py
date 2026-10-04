@@ -29,6 +29,7 @@ def extra(ap):
     ap.add_argument('--source', help='已完成新口径合并目录')
     ap.add_argument('--review', help='追加结构复核文件')
     ap.add_argument('--selection', help='第二轮：已封存233保留/47缺额选择台账')
+    ap.add_argument('--selection-round3', help='第三轮：已封存254保留/26缺额台账；各槽位仅一次')
     ap.add_argument('--env-file', default='.env')
     ap.add_argument('--execute', action='store_true', help='实际请求；默认只准备并展示缺额')
 
@@ -64,19 +65,25 @@ def load(source, review_path):
 def run(args):
     cfg, _, _, _ = setup(args, need_model=False, need_judge=False)
     selection_arg = getattr(args, 'selection', None)
-    round_id = 2 if selection_arg else 1
+    third = getattr(args, 'selection_round3', None)
+    if third and selection_arg:
+        raise ValueError('第二轮与第三轮不能同时指定')
+    round_id = 3 if third else 2 if selection_arg else 1
+    selection_arg = third or selection_arg
     if selection_arg:
         if args.source or args.review:
             raise ValueError('selection与source/review不能同时使用')
         source = review_path = Path(selection_arg).resolve()
-        if sha256(source) != '7b12e43c5b2ffa1ec4c734938d05565d0527dd6661db44d1dd3b461644a6ad89':
-            raise ValueError('第二轮台账不是登记版本')
+        expected_sha = ('3923c0aceee07678efd658c74f702cd038637c3ae8bb774d4e352da197ef5e1d'
+                        if round_id == 3 else '7b12e43c5b2ffa1ec4c734938d05565d0527dd6661db44d1dd3b461644a6ad89')
+        if sha256(source) != expected_sha:
+            raise ValueError('本轮台账不是登记版本')
         selection = json.loads(source.read_text(encoding='utf-8'))
         hashes = dict(selection['source_hashes'])
         if any(sha256(p) != h for p, h in hashes.items()):
             raise ValueError('第二轮台账来源哈希错误')
         hashes[str(source)] = sha256(source)
-        keep, slots = remaining_slots(selection)
+        keep, slots = remaining_slots(selection, round_id=round_id)
         old = list(keep)
         # 所有旧机械合格原文用于重复检查，不传入生成提示。
         for name in hashes:
@@ -105,6 +112,8 @@ def run(args):
              Path('experiments/d1_generate.py'), Path('experiments/d1_recover.py'),
              Path('experiments/d1_annotate.py'), Path('docs/RESEARCH_SPEC.md'),
              Path('docs/D1_REPLACEMENT_2026-10-04.md'), Path('docs/D1_REMAINING_PROPOSAL_2026-10-04.md')]
+    if round_id == 3:
+        paths.append(Path('docs/D1_ROUND3_2026-10-04.md'))
     hashes.update({str(p.resolve()): sha256(p) for p in paths})
     meta = dict(task='C10', status='running', start_time=now(), end_time=None,
                 git_commit=_git('rev-parse', 'HEAD'), source=str(source), review=str(review_path),

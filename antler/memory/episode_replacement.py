@@ -34,8 +34,11 @@ def replacement_slots(accepted, rejected, review):
     return keep, slots
 
 
-def remaining_slots(selection):
-    """第二轮只重写锁定台账的47个缺额，233个保留版本逐字保持。"""
+def remaining_slots(selection, *, round_id=2):
+    """仅允许已登记的第二轮47槽位或第三轮26槽位，保留版本不变。"""
+    if type(round_id) is not int or round_id not in (2, 3):
+        raise ValueError('仅允许已授权的第二轮或第三轮')
+    expected_keep = 233 if round_id == 2 else 254
     keep = selection['selected']
     validate_candidates(keep, allow_grouped=True)
     plan = make_plan()
@@ -44,15 +47,15 @@ def remaining_slots(selection):
     indexed = {r['id']: r for r in ledger}
     planned = {r['id']: r for r in plan['slots']}
     retained = {r['id']: r for r in keep}
-    if len(indexed) != len(ledger) or set(indexed) != set(planned) or len(retained) != 233:
-        raise ValueError('第二轮必须绑定280槽位和233个保留版本')
+    if len(indexed) != len(ledger) or set(indexed) != set(planned) or len(retained) != expected_keep:
+        raise ValueError('必须绑定280槽位和本轮登记的保留版本数')
     for identity, record in indexed.items():
         if (record['status'] in ('old_retained', 'new_selected')) != (identity in retained):
             raise ValueError('保留版本与台账状态不一致')
         if identity in retained and record['text_sha256'] != hashlib.sha256(retained[identity]['text'].encode()).hexdigest():
             raise ValueError('保留文本哈希不一致')
-    slots = [{**s, 'replacement_round': 2, 'previous_text_sha256': indexed[s['id']].get('text_sha256')}
+    slots = [{**s, 'replacement_round': round_id, 'previous_text_sha256': indexed[s['id']].get('text_sha256')}
              for s in plan['slots'] if s['id'] not in retained]
-    if len(slots) != 47:
-        raise ValueError('本轮只允许固定47个缺额')
+    if len(slots) != 280 - expected_keep:
+        raise ValueError('本轮只允许登记的固定缺额')
     return keep, slots
