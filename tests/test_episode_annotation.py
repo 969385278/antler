@@ -27,6 +27,19 @@ def test_valid_neutral_and_fenced_reply():
     assert parse_annotation('```json\n{"labels":{},"reason":"No supported change"}\n```')['labels'] == {}
 
 
+def test_explicit_plus_is_opt_in_and_preserves_strings():
+    value = '{"labels":{"O":+1,"N":-1},"reason":"literal :+1, and \\"O\\":+1 remain"}'
+    # 使用json编码字符串，避免测试本身产生非法转义。
+    reason = 'literal :+1, and "O":+1 remain'
+    value = '{"labels":{"O":+1,"N":-1},"reason":' + json.dumps(reason) + '}'
+    with pytest.raises(ValueError): parse_annotation(value)
+    result = parse_annotation(value, allow_explicit_plus=True)
+    assert result == {'labels': {'O': 1, 'N': -1}, 'reason': reason}
+    for bad in ('+10', '+1.0', '++1', 'true', '"+1"'):
+        with pytest.raises(ValueError):
+            parse_annotation('{"labels":{"O":' + bad + '},"reason":"x"}', allow_explicit_plus=True)
+
+
 @pytest.fixture
 def case(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'experiments'))
@@ -80,3 +93,43 @@ def test_configuration_rejects_embedded_credentials(case):
     Path(args.env_file).write_text('MINIMAX_API_KEY=x\nMINIMAX_MODEL=m\nMINIMAX_BASE_URL=https://user:key@example.org/v1\n')
     with pytest.raises(ValueError, match='HTTPS'):
         module.read_connection('minimax', args.env_file)
+
+
+def test_resume_reuses_archived_responses_and_only_requests_suffix(case):
+    module, args, root = case
+    Path(args.packet).write_text(''.join(json.dumps({'id': f'D1B{i:04d}', 'text': f'Story {i}.'}) + '\n' for i in range(3)))
+    calls = []
+    def reply(content):
+        return SimpleNamespace(status_code=200, json=lambda: {'model': 'test-model', 'choices': [
+            {'finish_reason': 'stop', 'message': {'content': content}}]})
+    def initial(*a, **k):
+        calls.append(1)
+        return reply('{"labels":{"O":' + ('1' if len(calls) == 1 else '+1') + '},"reason":"x"}')
+    with pytest.raises(ValueError): module.run(args, post=initial)
+    assert len(calls) == 2
+    source = next((root / 'out' / 'd1_annotations').iterdir())
+    saved = {p.name: p.read_bytes() for p in source.iterdir()}
+    args.resume = str(source); args.allow_explicit_plus = True
+    remaining = []
+    def suffix(*a, **k):
+        remaining.append(k['json'])
+        return reply('{"labels":{},"reason":"no change"}')
+    out = module.run(args, post=suffix)
+    assert len(remaining) == 1
+    assert all((source / name).read_bytes() == content for name, content in saved.items())
+    labels = json.loads((out / 'labels.json').read_text())['records']
+    assert len(labels) == 3 and labels[1]['explicit_plus_normalized']
+    assert not labels[0]['explicit_plus_normalized']
+    assert (out / '0001_response.json').read_bytes() == saved['0001_response.json']
+    with pytest.raises(FileExistsError): module.run(args, post=suffix)
+    assert len(remaining) == 1
+
+
+def test_unknown_request_cannot_be_retried_via_resume(case):
+    module, args, root = case
+    def failure(*a, **k): raise RuntimeError('network')
+    with pytest.raises(RuntimeError): module.run(args, post=failure)
+    source = next((root / 'out' / 'd1_annotations').iterdir())
+    args.resume = str(source); args.allow_explicit_plus = True
+    with pytest.raises(ValueError, match='未知'):
+        module.run(args, post=lambda *a, **k: pytest.fail('不应发出请求'))

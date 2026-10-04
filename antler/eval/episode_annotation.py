@@ -24,7 +24,7 @@ def request_text(row):
     return ANNOTATION_PROMPT + json.dumps(row['text'], ensure_ascii=False)
 
 
-def parse_annotation(content):
+def parse_annotation(content, *, allow_explicit_plus=False):
     if not isinstance(content, str):
         raise ValueError('标注回复不是文本')
     value = content.strip()
@@ -33,6 +33,10 @@ def parse_annotation(content):
         if not match:
             raise ValueError('标注代码块不完整')
         value = match.group(1)
+    if allow_explicit_plus:
+        # 跳过完整字符串，只去掉对象数值+1前的加号；不修补引号、键或缺失标签。
+        value = re.sub(r'"(?:\\.|[^"\\])*"|(?P<prefix>:\s*)\+1(?=\s*[,}])',
+                       lambda m: m.group('prefix') + '1' if m.group('prefix') is not None else m.group(0), value)
     def unique(pairs):
         result = {}
         for k, v in pairs:
