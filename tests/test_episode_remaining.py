@@ -54,3 +54,17 @@ def test_invalid_evidence_rejected(fault):
     elif fault == 'duplicate': reviews.append(reviews[0])
     else: annotations[0]['llm_a'] = {'O': 2}
     with pytest.raises(ValueError): select_remaining(s, rows, annotations, reviews)
+
+
+def test_invalid_response_is_preserved_not_counted_as_neutral():
+    s, rows, annotations, reviews = inputs()
+    removed = annotations.pop(0)
+    invalid = [{'id': removed['id'], 'reason': '非法JSON', 'response_sha256': 'a'*64}]
+    result = select_remaining(s, rows, annotations, reviews, invalid_annotations=invalid)
+    assert result['counts']['new_annotation_invalid'] == 1
+    assert len(result['selected']) == 279
+    with pytest.raises(ValueError):
+        select_remaining(s, rows, annotations+[removed], reviews, invalid_annotations=invalid)
+    invalid[0]['response_sha256'] = ''
+    with pytest.raises(ValueError):
+        select_remaining(s, rows, annotations, reviews, invalid_annotations=invalid)

@@ -7,7 +7,7 @@ from .episode_data import label_valid, normalize, validate_candidates, validate_
 from .episode_replacement import remaining_slots
 
 
-def select_remaining(selection, candidates, annotations, reviews):
+def select_remaining(selection, candidates, annotations, reviews, *, invalid_annotations=()):
     """完整双标及先封存结构审核后选择唯一版本；缺失标签直接报错。"""
     keep, slots = remaining_slots(selection)
     allowed = {r['id']: r for r in slots}
@@ -17,9 +17,16 @@ def select_remaining(selection, candidates, annotations, reviews):
     generated = {r['id']: r for r in candidates}
     labels = {r['id']: r for r in annotations}
     reviewed = {r['id']: r for r in reviews}
+    invalid = {r['id']: r for r in invalid_annotations}
+    if len(invalid) != len(invalid_annotations) or set(invalid) & set(labels):
+        raise ValueError('无效响应重复或同时当作有效标签')
+    for record in invalid.values():
+        digest = record.get('response_sha256', '')
+        if not record.get('reason') or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+            raise ValueError('无效标注需要原始响应哈希和原因')
     if len(labels) != len(annotations) or len(reviewed) != len(reviews):
         raise ValueError('双标或结构审核身份重复')
-    if set(generated) - set(allowed) or set(labels) != set(generated) or set(reviewed) != set(generated):
+    if set(generated) - set(allowed) or set(labels) | set(invalid) != set(generated) or set(reviewed) != set(generated):
         raise ValueError('只能验收缺额，必须完整覆盖新候选')
     retained_texts = {normalize(r['text']) for r in keep}
     chosen = list(keep)
@@ -29,17 +36,21 @@ def select_remaining(selection, candidates, annotations, reviews):
         if identity not in generated:
             ledger.append({'id': identity, 'status': 'no_new_candidate'})
             continue
-        row, annotation, review = generated[identity], labels[identity], reviewed[identity]
+        row, annotation, review = generated[identity], labels.get(identity), reviewed[identity]
         digest = hashlib.sha256(row['text'].encode()).hexdigest()
         if (row.get('replacement_round') != 2 or row.get('attempt') != 4
                 or row.get('previous_text_sha256') != slot['previous_text_sha256']):
             raise ValueError('新版本轮次或前版绑定错误')
         if normalize(row['text']) in retained_texts:
             raise ValueError('新版本复制保留文本')
-        if annotation.get('text_sha256') != digest or review.get('text_sha256') != digest:
+        if (annotation is not None and annotation.get('text_sha256') != digest) or review.get('text_sha256') != digest:
             raise ValueError('标签或结构审核未绑定原文')
         if review.get('status') not in ('compatible', 'requires_review', 'exclude'):
             raise ValueError('结构审核状态非法')
+        if identity in invalid:
+            ledger.append({'id': identity, 'status': 'new_annotation_invalid', 'text_sha256': digest,
+                           'annotation_error': invalid[identity]})
+            continue
         a, b = annotation['llm_a'], annotation['llm_b']
         if not label_valid(a) or not label_valid(b):
             raise ValueError('非法标签不可当中性')
