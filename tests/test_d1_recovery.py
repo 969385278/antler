@@ -62,3 +62,49 @@ def test_second_attempt_changes_prompt_and_provenance_only(module, tmp_path):
     assert r['valid'] and r['candidate']['attempt'] == 2
     for k in ('id', 'intended', 'group_id', 'split'):
         assert r['candidate'][k] == slot[k]
+
+
+def parent_fixture(module, tmp_path):
+    parent = tmp_path / 'parent'; parent.mkdir()
+    source = tmp_path / 'first'; source.mkdir()
+    plan = make_plan(); first, second, third = plan['slots'][:3]
+    original = [{**candidate(third['id'], third['intended']), **third}]
+    module.write_json(parent / 'run_meta.json', {'status': 'stopped', 'source': str(source), 'completed_requests': 1})
+    module.write_json(parent / 'split_plan.json', plan)
+    module.write_json(parent / 'request_order.json', [first['id'], second['id']])
+    module.write_json(parent / 'unattempted.json', [second['id']])
+    (parent / first['id']).mkdir()
+    module.write_json(parent / first['id'] / 'request.json', {})
+    module.write_json(parent / first['id'] / 'result.json', {'valid': False})
+    (parent / 'candidates.jsonl').write_text(json.dumps(original[0]) + '\n')
+    return parent, source, plan, original
+
+
+def seal(module, parent):
+    module.write_json(parent / 'artifact_hashes.json', {str(p.relative_to(parent)): module.sha256(p)
+        for p in parent.rglob('*') if p.is_file() and p.name != 'artifact_hashes.json'})
+
+
+def test_continuation_only_takes_unrequested_suffix(module, tmp_path):
+    parent, source, plan, original = parent_fixture(module, tmp_path)
+    seal(module, parent)
+    rows, slots = module.continuation(parent, source, plan, original)
+    assert rows == original and slots == [plan['slots'][1]]
+
+
+@pytest.mark.parametrize('fault', ['requested', 'reordered', 'replaced'])
+def test_continuation_rejects_retry_or_replacement(module, tmp_path, fault):
+    parent, source, plan, original = parent_fixture(module, tmp_path)
+    if fault == 'requested': (parent / plan['slots'][1]['id']).mkdir()
+    elif fault == 'reordered': module.write_json(parent / 'unattempted.json', [plan['slots'][0]['id']])
+    else: (parent / 'candidates.jsonl').write_text('')
+    seal(module, parent)
+    with pytest.raises(ValueError): module.continuation(parent, source, plan, original)
+
+
+def test_digital_role_is_explicit_opt_in(module, tmp_path):
+    def generate(slot, conf, out, **kwargs):
+        (out / slot['id']).mkdir()
+        assert module.ROLE_SUFFIX in kwargs['prompt_suffix']
+        return {'id': slot['id'], 'valid': True, 'candidate': candidate()}
+    module.collect(make_plan()['slots'][:1], {}, tmp_path, set(), generate=generate, digital_role=True)
