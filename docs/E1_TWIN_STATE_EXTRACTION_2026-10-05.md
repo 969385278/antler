@@ -37,3 +37,19 @@
 下一步只比较明确登记的正确状态、同行动相反结局状态、上下文和中性；原始幅度必须保留。尚未授予任何方向与幅度的正式行为资格。能力≤2pp、质量和独立test要求不因此减少。本阶段不执行旧20个δ能力矩阵、编码器或软前缀。
 
 只研究上游建立的一个情境是开发路由规则，不是把总体目标缩成单情境成功。跨情境泛化、低维压缩、可加、撤销与人格线性读数仍需各自证据。
+
+## 实现与验证
+
+入口 `experiments/e1_twin_state_extract.py` 已实现，默认预检不加载模型或评委。新增11项CPU离线测试：非正交幅度、五中性均值、反馈交互、探针反向与零向量、无效输入、默认预检、真实随机微型模型72批/540提示、冻结权重与中断后的钩子清理。全套 `pytest -q tests`：1179 passed，110.36秒，无模型下载或评委请求。
+
+服务器仓库根目录：
+
+```bash
+python experiments/e1_twin_state_extract.py \
+  --config configs/main.yaml \
+  --reference-run outputs/main/e1_twin_context_gate/9c008133e6e94c7d91b0ff2d5a0af44f \
+  --audit-run outputs/main/e1_twin_gate_audit/6d8a801cb56a426e932dc217377f7b11 \
+  --model-fingerprint outputs/analysis/e1_model_fingerprint_20261004T045329Z.json
+```
+
+上述命令仅预检。预检成功后添加 `--execute` 执行固定批次；已有claim时不得再启动。本阶段无需API key。实际批前向和提示条数通过模型前向钩子计数，不用理论预算冒充已执行数。
