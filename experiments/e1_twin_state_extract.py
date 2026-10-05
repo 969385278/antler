@@ -31,6 +31,7 @@ PROTOCOL = {'scenario': 'twin04_ideas', 'layer': 16, 'n_probes': 60, 'probe_seed
 
 
 def extra(ap):
+    ap.add_argument('--layer21-pilot', action='store_true', help='作者批准的独立第21层小样本；旧默认不变')
     ap.add_argument('--reference-run', required=True)
     ap.add_argument('--audit-run', required=True)
     ap.add_argument('--directions', default='outputs/analysis/e1_projection_20261004/directions.pt')
@@ -59,7 +60,8 @@ def validate(args):
     if digest(args.directions) != DIRECTION_SHA:
         raise ValueError('人格基不是固定来源')
     directions = torch.load(args.directions, map_location='cpu', weights_only=True)
-    basis, scale = directions['U'][16], float(directions['s'][16])
+    layer = 21 if getattr(args, 'layer21_pilot', False) else 16
+    basis, scale = directions['U'][layer], float(directions['s'][layer])
     if basis.ndim != 2 or basis.shape[0] != 5 or not torch.allclose(basis.norm(dim=1), torch.ones(5), atol=1e-5):
         raise ValueError('人格方向形状或单位范数不符')
     pool = [{'dim': d, 'pole': BIG_FIVE[d][0], 'index': i, 'question': q}
@@ -92,11 +94,13 @@ def collect(model, tok, episodes, probes, *, layer=16, progress=None):
 def run(args):
     cfg, _, _, _ = setup(args, need_model=False, need_judge=False)
     episodes, probes, basis, scale = validate(args)
+    layer = 21 if getattr(args, 'layer21_pilot', False) else 16
+    protocol = {**PROTOCOL, 'layer': layer}
     print(f'[激活诊断] 四故事/60探针/540提示，执行={args.execute}', flush=True)
     if not args.execute:
-        return {'protocol': PROTOCOL, 'model_loaded': False, 'judge_loaded': False}
+        return {'protocol': protocol, 'model_loaded': False, 'judge_loaded': False}
     model_hashes = verify_model((ROOT / cfg['model']).resolve(), args.model_fingerprint)
-    root = Path(cfg['out_path']) / 'e1_twin_state_extract'; root.mkdir(parents=True, exist_ok=True)
+    root = Path(cfg['out_path']) / ('e1_twin_state_extract_l21' if layer == 21 else 'e1_twin_state_extract'); root.mkdir(parents=True, exist_ok=True)
     out = root / uuid.uuid4().hex
     with (root / (RUN_ID + '_twin04_ideas.claim')).open('x', encoding='utf-8') as f:
         f.write(str(out.resolve()))
@@ -104,7 +108,7 @@ def run(args):
     meta = {'task': 'C12', 'status': 'running', 'start_time': now(), 'end_time': None,
             'git_commit': _git('rev-parse', 'HEAD'), 'git_dirty': bool(_git('status', '--porcelain')),
             'config': _redacted(cfg), 'config_path': str(Path(args.config).resolve()),
-            'argv': _redacted(sys.argv[1:]), 'protocol': PROTOCOL, 'model_hashes': model_hashes,
+            'argv': _redacted(sys.argv[1:]), 'protocol': protocol, 'model_hashes': model_hashes,
             'torch': str(torch.__version__), 'transformers': transformers.__version__,
             'cuda': torch.version.cuda, 'gpu': None, 'seed': 0, 'judge': None,
             'conditions_completed': 0, 'prompt_sequences_completed': 0, 'batch_forwards_completed': 0,
@@ -116,6 +120,8 @@ def run(args):
                    Path(args.audit_run) / 'integrity.json', ROOT / 'docs/RESEARCH_SPEC.md',
                    ROOT / 'docs/E1_TWIN_STATE_EXTRACTION_2026-10-05.md']
         sources += list((ROOT / 'antler').rglob('*.py')) + list((ROOT / 'experiments').glob('*.py'))
+        if layer == 21:
+            sources.append(ROOT / 'docs/E1_L21_SMALL_PILOT_2026-10-05.md')
         sources += [KIT / 'trait_extract' / (BIG_FIVE[d][0] + '.json') for d in DIMS]
         meta['data_hashes'] = {str(p.resolve()): digest(p) for p in sources}
         seal_sources(out, meta['data_hashes'])
@@ -142,12 +148,12 @@ def run(args):
             print(f'[激活读取] {n}/9条件，{n * 60}/540提示', flush=True)
         counter = model.register_forward_pre_hook(count_forward, with_kwargs=True)
         try:
-            activations, _ = collect(model, tok, episodes, probes, progress=save_progress)
+            activations, _ = collect(model, tok, episodes, probes, layer=layer, progress=save_progress)
         finally:
             counter.remove()
         if (meta['batch_forwards_completed'], meta['prompt_sequences_completed']) != (72, 540):
             raise ValueError('实际前向不符合固定预算')
-        write_json(out / 'summary.json', analyze(activations, basis, scale))
+        write_json(out / 'summary.json', analyze(activations, basis, scale, layer=layer))
         meta['status'] = 'completed'
     except BaseException as exc:
         meta.update(status='failed', error_type=type(exc).__name__)

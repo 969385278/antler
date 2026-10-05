@@ -42,7 +42,7 @@ def describe(vector, basis, scale):
             'reconstructed_norm_physical': float(rebuilt.norm()) * scale}
 
 
-def analyze(activations, basis, scale):
+def analyze(activations, basis, scale, *, layer=16):
     """输入九条件×60探针×隐藏维；前四为CELLS、后五为固定中性。"""
     if (not isinstance(activations, torch.Tensor) or activations.ndim != 3
             or activations.shape[:2] != (9, 60) or not activations.is_floating_point()
@@ -73,7 +73,7 @@ def analyze(activations, basis, scale):
                           'reconstructed_cosine': cosine(delta1, delta2),
                           'second_over_first_norm': float(second.norm() / first.norm())
                           if float(first.norm()) > 0 else None}
-    return {'layer': 16, 'dims': ['O', 'C', 'E', 'A', 'N'], 'scale': scale,
+    return {'layer': layer, 'dims': ['O', 'C', 'E', 'A', 'N'], 'scale': scale,
             'groups': groups, 'probe_stability': stability, 'formal_e1_pass': False,
             'behavior_validated': False, 'injection_performed': False,
             'limits': '结果差值是配对诊断；两组探针不是独立经历。未优化、放大或测试行为。'}
