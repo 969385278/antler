@@ -1,6 +1,6 @@
 # 鹿角记忆（Antler Memory）
 
-> 研究进度（2026-10-05）：正在验证第21层decode的经历状态小样本，尚未正式通过E1。双胞胎上下文与第16层诊断已有结果，见 [当前进度](docs/PROGRESS.md) 和 [最新风险核查](docs/E1_L21_UPSTREAM_FINDINGS_2026-10-05.md)。
+> 研究进度（2026-10-05）：第21层decode小样本已完成，出现部分匹配信号及任务评分风险，尚未正式通过E1。见 [最新结果](docs/E1_L21_SMALL_PILOT_RESULTS_2026-10-05.md) 和 [当前进度](docs/PROGRESS.md)。
 
 
 **研究进度（2026-10-04）：[当前进展与下一步](docs/PROGRESS.md)**。E0 本轮方法搜索已收尾，Strict / Practical 均未正式通过；E1 已有探索信号，正式验证尚未完成。
