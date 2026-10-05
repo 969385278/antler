@@ -314,3 +314,34 @@ def test_capability_prediction_recompute_and_tamper_rejection(tmp_path, monkeypa
     seal()
     with pytest.raises(ValueError, match='逐题预测'):
         entry.validate_capability(tmp_path, vectors)
+
+
+@pytest.mark.parametrize('problem', [None, 'generated', 'scored', 'judge', 'answers', 'extra_file'])
+def test_only_explicitly_approved_fixed_empty_failure_can_get_new_claim(tmp_path, monkeypatch, problem):
+    failed = tmp_path / entry.EMPTY_FAILURE_RUN
+    failed.mkdir()
+    claim = tmp_path / (entry.STATE_RUN + '.claim')
+    claim.write_text(str(failed), encoding='utf-8')
+    meta = {'status': 'failed', 'stage': 'validation', 'protocol': entry.PROTOCOL,
+            'generated': 0, 'reused': 0, 'scored': 0, 'judge': None}
+    answers = []
+    if problem in ('generated', 'scored'):
+        meta[problem] = 1
+    elif problem == 'judge':
+        meta['judge'] = {'model': '评委'}
+    elif problem == 'answers':
+        answers = [{'a': '旧回答'}]
+    elif problem == 'extra_file':
+        (failed / 'judge_requests.jsonl').write_text('{}\n', encoding='utf-8')
+    entry.write_json(failed / 'run_meta.json', meta)
+    entry.write_json(failed / 'scored_answers.json', answers)
+    monkeypatch.setattr(entry, 'EMPTY_FAILURE_SHA', digest(failed / 'run_meta.json'))
+    entry.write_json(failed / 'artifact_hashes.json', {p.name: digest(p) for p in failed.iterdir()})
+    original = claim.read_bytes()
+    assert entry.output_root(tmp_path) == tmp_path
+    if problem:
+        with pytest.raises(ValueError):
+            entry.output_root(tmp_path, approved=True)
+    else:
+        assert entry.output_root(tmp_path, approved=True) == tmp_path / 'approved_empty_restart'
+    assert claim.read_bytes() == original

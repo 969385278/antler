@@ -25,6 +25,9 @@ from e1_twin_context_gate import SequentialJudge, read_materials, seal_sources, 
 from e1_twin_raw_capability import fixed_vectors, STATE_RUN, STATE_SHA, INDICES_SHA, PROTOCOL as CAP_PROTOCOL
 from e1_twin_state_extract import RUN_ID, SUMMARY_SHA
 
+EMPTY_FAILURE_RUN = 'b342ea30e4e1477fa650b0a1687957ce'
+EMPTY_FAILURE_SHA = 'a997288c97fc2f263a3da75ba2e92ff7943fa14fa8ed4505809ef4c32fd643bb'
+
 
 def extra(ap):
     ap.add_argument('--state-run', required=True)
@@ -34,6 +37,28 @@ def extra(ap):
     ap.add_argument('--materials', default='data/diagnostics/twin_outcome_dev_v1.json')
     ap.add_argument('--model-fingerprint', required=True)
     ap.add_argument('--execute', action='store_true', help='固定一次行为采集/评分，不重试或追加')
+    ap.add_argument('--approved-empty-restart', action='store_true',
+                    help='仅在作者明确批准后，恢复已封存的零生成/零请求初始化失败；默认关闭')
+
+
+def output_root(root, approved=False):
+    """原claim和失败归档不变；显式批准仅可开放一次独立恢复claim。"""
+    if not approved:
+        return root
+    claim = root / (STATE_RUN + '.claim')
+    failed = Path(claim.read_text(encoding='utf-8')).resolve()
+    if not failed.is_relative_to(root.resolve()) or failed.name != EMPTY_FAILURE_RUN:
+        raise ValueError('恢复只允许固定的初始化失败归档')
+    verify_manifest(failed, read(failed / 'artifact_hashes.json'))
+    meta = read(failed / 'run_meta.json')
+    files = {p.name for p in failed.iterdir()}
+    if (digest(failed / 'run_meta.json') != EMPTY_FAILURE_SHA or meta.get('status') != 'failed'
+            or meta.get('stage') != 'validation' or meta.get('protocol') != PROTOCOL
+            or any(meta.get(k) != 0 for k in ('generated', 'reused', 'scored'))
+            or meta.get('judge') is not None or read(failed / 'scored_answers.json') != []
+            or files != {'artifact_hashes.json', 'run_meta.json', 'scored_answers.json'}):
+        raise ValueError('已经产生回答、请求或来源变化的批次不能用零请求恢复')
+    return root / 'approved_empty_restart'
 
 
 def validate_capability(folder, vectors):
@@ -237,7 +262,7 @@ def run(args):
         print(f'[行为预检] {len(jobs)-90}新回答/90复用/{len(jobs)*3}评分，未加载模型/评委', flush=True)
         return {'n_answers': len(jobs), 'model_loaded': False, 'judge_loaded': False}
     model_hashes = verify_model((ROOT / cfg['model']).resolve(), args.model_fingerprint)
-    root = Path(cfg['out_path']) / 'e1_twin_raw_behavior'
+    root = output_root(Path(cfg['out_path']) / 'e1_twin_raw_behavior', getattr(args, 'approved_empty_restart', False))
     root.mkdir(parents=True, exist_ok=True)
     out = root / uuid.uuid4().hex
     with (root / (STATE_RUN + '.claim')).open('x', encoding='utf-8') as f:
@@ -249,6 +274,8 @@ def run(args):
             'protocol': PROTOCOL, 'model_hashes': model_hashes, 'seed': 0, 'generated': 0, 'reused': 0, 'scored': 0,
             'formal_e1_pass': False, 'behavior_validated': False, 'torch': str(torch.__version__),
             'transformers': transformers.__version__, 'cuda': torch.version.cuda, 'gpu': None, 'judge': None}
+    if getattr(args, 'approved_empty_restart', False):
+        meta['approved_empty_restart_source'] = EMPTY_FAILURE_RUN
     save = lambda: write_json(out / 'run_meta.json', meta)
     rows = []
     save()
