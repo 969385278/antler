@@ -81,10 +81,10 @@ def calibration():
             if i == 1:
                 ax.set_xlabel('注入系数（s16）')
     axes[0, 0].legend(frameon=False, fontsize=8, loc='center right')
-    finish(fig, name, 'E0｜人格读数随注入系数变化',
+    finish(fig, name, 'E0 | 人格读数随注入系数系统变化',
            '第16层 · 历史 calib · 两种轴定义、两套极性量表分别展示',
-           '来源曲线只有 O/E/A；C/N 不在该汇总中。原汇总未提供区间。\n'
-           '高极与低极是独立量表，不能直接相加。历史曲线不授予当前候选资格；E0 Strict / Practical 未通过。')
+           '第16层 calib 题；高极与低极为独立量表，不能直接相加。\n'
+           '来源汇总只含 O/E/A 三个维度，未提供区间。')
 
 
 def crosstalk():
@@ -103,10 +103,11 @@ def crosstalk():
     ax.set_ylabel('测量维度（行）')
     ax.grid(False)
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.04, label='人格分变化（相对零注入）')
-    finish(fig, name, 'E0｜行为串扰并未消失',
+    finish(fig, name, 'E0 | 大五方向之间存在行为串扰',
            '第16层 · 历史单极方向 · calib · 每个单元格保留原始符号',
-           'O/C/E/A/N 注入系数依次为 +0.20 / +0.20 / +0.125 / +0.20 / +0.185。\n'
-           '量表端点可能掩盖串扰；源汇总无区间。不是新机制的验证矩阵，不能据此宣布 E0 通过。')
+           'O/C/E/A/N 注入系数依次为 +0.20 / +0.20 / +0.125 / +0.20 / +0.185；\n'
+           '行是测量维度，列是注入维度；数值为人格分变化（相对零注入）。\n'
+           '量表端点可能掩盖部分串扰；来源汇总未提供区间。')
 
 
 def tradeoff():
@@ -141,10 +142,11 @@ def tradeoff():
         ax.set_ylim(4.6, -0.6)
         ax.grid(axis='x')
         ax.set_axisbelow(True)
-    finish(fig, name, 'E0｜人格位移伴随质量代价',
+    finish(fig, name, 'E0 | 单层注入的人格增益伴随质量代价',
            '第21层 · C−0.225 · decode-only · 同期共同 zero；不拼接旧轮分数',
-           '冻结剥离版四项损失均超过 10；Strict 失败。最近 mild Prompt 仍差 30.17 分，强度未匹配。\n'
-           '质量表未提供区间。Prompt 比较仅作描述，不作同强度因果比较；Practical 未证实。', bottom=0.31, left=0.17)
+           '第21层、仅生成阶段注入；误差线为人格增益的 95% CI。\n'
+           '剥离版四项质量损失均超过预设的 10 分门槛。\n'
+           'Prompt 对照与注入的人格强度未能匹配，仅作描述性比较。', bottom=0.31, left=0.17)
     # 长条件名为左侧单独预留空间。
 
 
@@ -169,10 +171,11 @@ def kl():
     ax.set_ylim(-5, 72)
     ax.set_ylabel('KL 缩减比例（%）')
     ax.grid(axis='y')
-    finish(fig, name, 'E1｜人格五维保留部分分布效应',
+    finish(fig, name, 'E1 | 大五子空间比随机子空间保留更多经历效应',
            '第16层 · 10 段 dev · 90 条件按登记选参；点为逐经历值，横线为报告均值',
-           '逐经历计算 1 − KL_final / KL_zero 后平均。开发集选参、单随机基，仅作描述，不推断显著性。\n'
-           '不是人格分、正确率或记忆保留率；全维是有限优化对照，不是理论上限。正式 E1 未完成。')
+           '10 段开发集经历，逐经历计算 1 − KL_final / KL_zero 后平均；单一随机基，仅作描述。\n'
+           '该比例衡量输出分布差距的缩小，不是人格分或记忆保留率；\n'
+           '全维为有限优化下的对照，不是理论上限。')
 
 
 def gate():
@@ -199,10 +202,10 @@ def gate():
         r = next(r for r in rows if r['scenario'] == s)
         labels.append(f"{s} ({r['dim']})\n{r['category']}")
     axes[0].set_yticks(range(6), labels, fontsize=8)
-    finish(fig, name, 'E1｜六情境中一个建立上下文交互',
+    finish(fig, name, 'E1 | 结局对人格的影响依赖具体情境',
            '1 个已建立 · 2 个部分证据 · 3 个未建立；分类沿用原报告',
            'I = (D+ − D−) / 2；误差线为十题配对 bootstrap 95% CI，不是跨情境区间。\n'
-           '上下文效应不证明压缩、泛化、可加或撤销；正式 E1 未通过。', left=0.27)
+           '分类沿用原报告：1 个已建立、2 个部分证据、3 个未建立。', left=0.27)
     # 预留情境与分类两行标签。
 
 
@@ -226,10 +229,10 @@ def geometry():
     ax.ticklabel_format(axis='y', style='plain')
     ax.grid(axis='y', zorder=0)
     ax.legend(frameon=False, fontsize=9, loc='upper right')
-    finish(fig, name, 'E1｜共有反馈强，行动交互的五维读数弱',
+    finish(fig, name, 'E1 | 经历差值主要落在共同的“好/坏反馈”方向上',
            '第16层 · 最后 prompt-token · 60 探针 · 固定情境 twin04_ideas · 未做行为注入',
-           'd+ 与 d− 余弦为 0.968；交互五维重建仅保留全维交互平方范数的 0.55%。\n'
-           '五维为非正交基重建的物理范数；0.55% 不是 KL 解释率或记忆保留率。固定读取诊断不证明所有压缩失败。')
+           'd+ 与 d− 余弦 0.968；交互分量的五维重建只保留其平方范数的 0.55%。\n'
+           '五维为非正交基重建的物理范数；0.55% 是投影能量比例，不是 KL 解释率或记忆保留率。')
 
 
 def pilot():
@@ -254,10 +257,11 @@ def pilot():
         ax.set_xlabel('误差差值（正值：匹配更近）')
         ax.grid(axis='x')
     axes[0].set_yticks(range(6), [f"{f} · {'高极' if p == 'high' else '低极'}" for p, f in labels], fontsize=9)
-    finish(fig, name, 'E1｜L21 小样本有信号，证据仍有限',
+    finish(fig, name, 'E1 | 原幅度写入：匹配经历优于随机，与错配的差距较小',
            '第21层 · decode 原幅度 · 单情境、五题、seed0 · 原报告 95% 描述区间',
-           '区间仅覆盖五题，不代表跨经历泛化；随机仅与 full 同范数。纯反馈也有匹配优势，未排除共有反馈解释。\n'
-           'full 一个低极条件任务损失 14 分超限；能力仅为 200 题风险筛查。正式 E1 与行为资格未通过。', left=0.17)
+           '第21层、单情境、五题、seed0；区间为五题描述区间，不代表跨经历泛化。\n'
+           '随机向量只与 full 同范数。纯反馈向量也有匹配优势，\n'
+           '因此不能排除“只保存了共同反馈”的解释。', left=0.17)
 
 
 def main():
