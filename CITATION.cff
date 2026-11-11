@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this code or its findings, please cite it as below."
-title: "Antler Memory: Writing Experiences into the Persona of a Frozen LLM via Residual-Stream Activation States"
+title: "Antler Memory: Can Experiences Be Written into an LLM's Persona? An Empirical Study with Residual-Stream Activation States"
 authors:
   - family-names: Wang
     given-names: Lingsong
