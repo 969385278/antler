@@ -89,6 +89,7 @@
 
 ## 其他
 
+- [blogs/](blogs/)：面向一般读者的研究博客草稿
 - [PROGRESS.md](PROGRESS.md)：按时间记录的研究进度（较早版本，最新情况以进展总览为准）
 - [TASK_HUMAN_IMPORT.md](TASK_HUMAN_IMPORT.md)：任务理解分的人工盲评导入说明
 - [archive/](archive/)：规格书与协议在特定提交时的快照，供实验来源哈希复核
