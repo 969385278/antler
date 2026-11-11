@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this code or its findings, please cite it as below."
+title: "Antler Memory: Writing Experiences into the Persona of a Frozen LLM via Residual-Stream Activation States"
+authors:
+  - family-names: Wang
+    given-names: Lingsong
+    affiliation: "East China Normal University"
+    email: 17721556010@163.com
+repository-code: "https://github.com/969385278/antler"
+license: MIT
+date-released: 2026-11-11
+keywords:
+  - large language models
+  - activation steering
+  - persona vectors
+  - Big Five personality
+  - memory
+  - mechanistic interpretability
