@@ -1,0 +1,204 @@
+{
+  "source": [
+    "outputs/analysis/e1_dev_terminal_20261004/run/results.json",
+    "outputs/analysis/e1_dev_terminal_20261004/selection.json"
+  ],
+  "report": "docs/E1_PROGRESS_AND_ISSUES.md",
+  "run_id": "31f70d1cb5874f7f9b3791f99eaa6d6a",
+  "note": "10段dev、每空间三学习率、固定单随机基。逐经历1−KL_final/KL_zero再平均；不是记忆保留率，全维不是理论上限。若均值与报告不符则不展示该空间分布。",
+  "formal_e0_pass": false,
+  "formal_e1_pass": false,
+  "data": {
+    "rows": [
+      {
+        "episode": "d1_context08_Ominus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 4.398710770783831
+      },
+      {
+        "episode": "d1_context08_Oplus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 47.26397455580492
+      },
+      {
+        "episode": "d1_context06_Cminus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 11.151803014809358
+      },
+      {
+        "episode": "d1_context10_Cplus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 3.3533148472168928
+      },
+      {
+        "episode": "d1_context08_Eminus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 5.151192530224535
+      },
+      {
+        "episode": "d1_context08_Eplus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 7.468621261684893
+      },
+      {
+        "episode": "d1_context10_Aminus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 8.237546102130445
+      },
+      {
+        "episode": "d1_context08_Aplus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 1.9875734403627332
+      },
+      {
+        "episode": "d1_context08_Nminus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 18.896500307556373
+      },
+      {
+        "episode": "d1_context07_Nplus",
+        "space": "personality",
+        "arm": "personality_lr0",
+        "explained_pct": 6.114087897023457
+      },
+      {
+        "episode": "d1_context08_Ominus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 2.096311562854869
+      },
+      {
+        "episode": "d1_context08_Oplus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 8.471265811137151
+      },
+      {
+        "episode": "d1_context06_Cminus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 1.7213927480901892
+      },
+      {
+        "episode": "d1_context10_Cplus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": -2.4359586774873376
+      },
+      {
+        "episode": "d1_context08_Eminus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 1.0125613140573586
+      },
+      {
+        "episode": "d1_context08_Eplus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 1.70881742036737
+      },
+      {
+        "episode": "d1_context10_Aminus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 1.4261473624473497
+      },
+      {
+        "episode": "d1_context08_Aplus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": -0.10500966605333506
+      },
+      {
+        "episode": "d1_context08_Nminus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 5.098997592503551
+      },
+      {
+        "episode": "d1_context07_Nplus",
+        "space": "random",
+        "arm": "random_lr0",
+        "explained_pct": 4.466720211092589
+      },
+      {
+        "episode": "d1_context08_Ominus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 28.42025845389862
+      },
+      {
+        "episode": "d1_context08_Oplus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 68.29056427923932
+      },
+      {
+        "episode": "d1_context06_Cminus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 39.05376731247661
+      },
+      {
+        "episode": "d1_context10_Cplus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 29.918442310456562
+      },
+      {
+        "episode": "d1_context08_Eminus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 21.095796837086123
+      },
+      {
+        "episode": "d1_context08_Eplus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 38.713575986441086
+      },
+      {
+        "episode": "d1_context10_Aminus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 25.20819269945952
+      },
+      {
+        "episode": "d1_context08_Aplus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 23.72668068620686
+      },
+      {
+        "episode": "d1_context08_Nminus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 39.6707411209006
+      },
+      {
+        "episode": "d1_context07_Nplus",
+        "space": "full",
+        "arm": "full_lr0",
+        "explained_pct": 49.34408769687531
+      }
+    ],
+    "report_means_pct": {
+      "personality": 11.4,
+      "random": 2.35,
+      "full": 36.34
+    }
+  },
+  "source_sha256": {
+    "outputs/analysis/e1_dev_terminal_20261004/run/results.json": "7484c58acba846a6d151efb8011ce1f5e16d7095562f1272840e79c9e8e0eb26",
+    "outputs/analysis/e1_dev_terminal_20261004/selection.json": "61f73ff8c3e6648d9b51403507f7a6e955275c8e56b98857df5a430c7faeb68f"
+  }
+}

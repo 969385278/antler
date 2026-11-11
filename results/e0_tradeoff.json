@@ -1,0 +1,75 @@
+{
+  "source": [
+    "docs/E0_ROUND_CLOSEOUT_2026-10-04.md"
+  ],
+  "report": "docs/E0_ROUND_CLOSEOUT_2026-10-04.md",
+  "run_id": "d09a117a119541a2985f54a77c8e4391",
+  "note": "报告同期共同zero；第21层decode-only、C−0.225。增益带95%区间；质量表无区间。Prompt强度未匹配，Strict/Practical未通过。",
+  "formal_e0_pass": false,
+  "formal_e1_pass": false,
+  "data": [
+    {
+      "condition": "原方向",
+      "gain": 37.83,
+      "ci_low": 20.78,
+      "ci_high": 55.44,
+      "quality_losses": [
+        26.78,
+        21.89,
+        18.56,
+        22.06
+      ]
+    },
+    {
+      "condition": "冻结剥离版",
+      "gain": 36.67,
+      "ci_low": 22.39,
+      "ci_high": 51.78,
+      "quality_losses": [
+        22.94,
+        18.0,
+        14.89,
+        17.11
+      ]
+    },
+    {
+      "condition": "mild Prompt",
+      "gain": 66.83,
+      "ci_low": 58.67,
+      "ci_high": 73.67,
+      "quality_losses": [
+        -0.69,
+        1.33,
+        1.83,
+        -3.33
+      ]
+    },
+    {
+      "condition": "moderate Prompt",
+      "gain": 94.06,
+      "ci_low": 93.11,
+      "ci_high": 94.78,
+      "quality_losses": [
+        26.0,
+        36.61,
+        22.39,
+        41.56
+      ]
+    },
+    {
+      "condition": "strong Prompt",
+      "gain": 94.11,
+      "ci_low": 93.17,
+      "ci_high": 94.83,
+      "quality_losses": [
+        18.89,
+        29.11,
+        15.89,
+        34.22
+      ]
+    }
+  ],
+  "source_sha256": {
+    "docs/E0_ROUND_CLOSEOUT_2026-10-04.md": "acfcb20f60ba19c9007521436ebbfb38f6aa3c2036971f7fb77f40fab279dc40"
+  }
+}

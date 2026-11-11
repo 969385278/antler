@@ -1,0 +1,125 @@
+{
+  "source": [
+    "outputs/analysis/e1_twin_context_gate_20261005/summary_final.json",
+    "docs/E1_TWIN_CONTEXT_GATE_RESULTS_2026-10-05.md"
+  ],
+  "report": "docs/E1_TWIN_CONTEXT_GATE_RESULTS_2026-10-05.md",
+  "run_id": "9c008133e6e94c7d91b0ff2d5a0af44f",
+  "note": "I=(D+−D−)/2；低极统一到高极方向；十题配对bootstrap 95%区间，非跨情境区间。1已建立、2部分证据、3未建立。",
+  "formal_e0_pass": false,
+  "formal_e1_pass": false,
+  "data": [
+    {
+      "scenario": "twin01_study",
+      "dim": "O",
+      "pole": "high",
+      "mean": 0.12,
+      "ci_low": -2.82,
+      "ci_high": 3.17,
+      "category": "部分证据"
+    },
+    {
+      "scenario": "twin01_study",
+      "dim": "O",
+      "pole": "low",
+      "mean": 7.75,
+      "ci_low": 1.58,
+      "ci_high": 14.75,
+      "category": "部分证据"
+    },
+    {
+      "scenario": "twin02_walking",
+      "dim": "O",
+      "pole": "high",
+      "mean": 0.9,
+      "ci_low": -0.22,
+      "ci_high": 2.18,
+      "category": "部分证据"
+    },
+    {
+      "scenario": "twin02_walking",
+      "dim": "O",
+      "pole": "low",
+      "mean": 3.5,
+      "ci_low": 1.67,
+      "ci_high": 5.5,
+      "category": "部分证据"
+    },
+    {
+      "scenario": "twin03_language",
+      "dim": "E",
+      "pole": "high",
+      "mean": 2.08,
+      "ci_low": -2.92,
+      "ci_high": 7.59,
+      "category": "未建立"
+    },
+    {
+      "scenario": "twin03_language",
+      "dim": "E",
+      "pole": "low",
+      "mean": 1.33,
+      "ci_low": -3.0,
+      "ci_high": 5.33,
+      "category": "未建立"
+    },
+    {
+      "scenario": "twin04_ideas",
+      "dim": "E",
+      "pole": "high",
+      "mean": 11.75,
+      "ci_low": 4.67,
+      "ci_high": 19.42,
+      "category": "已建立"
+    },
+    {
+      "scenario": "twin04_ideas",
+      "dim": "E",
+      "pole": "low",
+      "mean": 8.5,
+      "ci_low": 4.5,
+      "ci_high": 12.5,
+      "category": "已建立"
+    },
+    {
+      "scenario": "twin05_garden",
+      "dim": "A",
+      "pole": "high",
+      "mean": -0.08,
+      "ci_low": -0.67,
+      "ci_high": 0.5,
+      "category": "未建立"
+    },
+    {
+      "scenario": "twin05_garden",
+      "dim": "A",
+      "pole": "low",
+      "mean": -1.0,
+      "ci_low": -3.08,
+      "ci_high": 0.17,
+      "category": "未建立"
+    },
+    {
+      "scenario": "twin06_clubroom",
+      "dim": "A",
+      "pole": "high",
+      "mean": 0.33,
+      "ci_low": -0.83,
+      "ci_high": 1.67,
+      "category": "未建立"
+    },
+    {
+      "scenario": "twin06_clubroom",
+      "dim": "A",
+      "pole": "low",
+      "mean": 0.0,
+      "ci_low": -3.0,
+      "ci_high": 2.17,
+      "category": "未建立"
+    }
+  ],
+  "source_sha256": {
+    "outputs/analysis/e1_twin_context_gate_20261005/summary_final.json": "8d2b85c769f6d9aa3c51b4590c8da24645d66d706e5e64f1681047b7c0e359a9",
+    "docs/E1_TWIN_CONTEXT_GATE_RESULTS_2026-10-05.md": "602fd0405de16a43a5b2758693244193618bfbf49cc477298c92cc380f1bc935"
+  }
+}

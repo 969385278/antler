@@ -1,0 +1,45 @@
+{
+  "source": [
+    "outputs/analysis/e1_twin_context_gate_20261005/outputs/main/e1_twin_state_extract/03e4e1c7f1d94fe0a31c87e623abf356/summary.json",
+    "docs/E1_TWIN_STATE_EXTRACTION_RESULTS_2026-10-05.md"
+  ],
+  "report": "docs/E1_TWIN_STATE_EXTRACTION_RESULTS_2026-10-05.md",
+  "run_id": "03e4e1c7f1d94fe0a31c87e623abf356",
+  "note": "第16层最后prompt-token、60探针；范数以s16归一化。五维为非正交基重建的物理范数；无注入。平方范数比例不是KL解释率、解释方差或记忆保留率。",
+  "formal_e0_pass": false,
+  "formal_e1_pass": false,
+  "data": {
+    "rows": [
+      {
+        "quantity": "d_plus",
+        "label": "正行动的好−坏 d+",
+        "full_norm": 0.034328,
+        "reconstructed_norm": 0.007796
+      },
+      {
+        "quantity": "d_minus",
+        "label": "负行动的好−坏 d−",
+        "full_norm": 0.032414,
+        "reconstructed_norm": 0.007416
+      },
+      {
+        "quantity": "interaction",
+        "label": "行动敏感交互 i=(d+−d−)/2",
+        "full_norm": 0.004325,
+        "reconstructed_norm": 0.000321
+      },
+      {
+        "quantity": "valence",
+        "label": "共同行动反馈 v=(d++d−)/2",
+        "full_norm": 0.033104,
+        "reconstructed_norm": 0.007601
+      }
+    ],
+    "action_cosine": 0.968,
+    "interaction_squared_norm_pct": 0.5499
+  },
+  "source_sha256": {
+    "outputs/analysis/e1_twin_context_gate_20261005/outputs/main/e1_twin_state_extract/03e4e1c7f1d94fe0a31c87e623abf356/summary.json": "007e42132ed6f2679efb50372523bb36d4712431794685c9f0eef0879810abab",
+    "docs/E1_TWIN_STATE_EXTRACTION_RESULTS_2026-10-05.md": "e08b12dff1d60702915e6ac83b78e1065f032cac52571905c1df039dcd8a622d"
+  }
+}

@@ -1,0 +1,495 @@
+{
+  "source": [
+    "outputs/main/analysis/2026-10-03T051134.770522_0000_4a1b7c43/curves.json"
+  ],
+  "report": "docs/RESEARCH_SPEC.md",
+  "run_id": "2026-10-03T051134.770522_0000_4a1b7c43",
+  "note": "历史calib，只有O/E/A；双极与单极完整展示。源汇总没有区间，不补造误差线；不能授予当前候选资格。",
+  "formal_e0_pass": false,
+  "formal_e1_pass": false,
+  "data": [
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 5.166666666666667
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 43.5
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 91.16666666666667
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 93.83333333333333
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 92.33333333333333
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 31.833333333333332
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 23.333333333333332
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 5.0
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 3.0
+    },
+    {
+      "axis": "bipolar",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 4.5
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 2.8333333333333335
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 11.833333333333334
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 43.333333333333336
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 84.33333333333333
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 94.33333333333333
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 78.66666666666667
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 62.166666666666664
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 31.666666666666668
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 9.5
+    },
+    {
+      "axis": "bipolar",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 2.5
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 34.666666666666664
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 56.166666666666664
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 78.0
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 93.0
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 94.0
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 49.833333333333336
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 39.0
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 26.166666666666668
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 15.666666666666666
+    },
+    {
+      "axis": "bipolar",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 4.833333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 7.333333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 56.333333333333336
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 91.16666666666667
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 93.33333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 91.33333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 64.16666666666667
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 33.0
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 5.0
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 3.0
+    },
+    {
+      "axis": "pole",
+      "dim": "A",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 3.3333333333333335
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 3.8333333333333335
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 13.0
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 43.333333333333336
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 84.33333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 92.66666666666667
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 84.33333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 64.33333333333333
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 31.666666666666668
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 11.333333333333334
+    },
+    {
+      "axis": "pole",
+      "dim": "E",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 5.166666666666667
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 26.666666666666668
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 53.666666666666664
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 78.0
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 91.66666666666667
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "high",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 92.66666666666667
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.4,
+      "score": 70.5
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": -0.2,
+      "score": 45.5
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.0,
+      "score": 26.166666666666668
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.2,
+      "score": 19.666666666666668
+    },
+    {
+      "axis": "pole",
+      "dim": "O",
+      "pole": "low",
+      "layer": 16,
+      "coef": 0.4,
+      "score": 10.333333333333334
+    }
+  ],
+  "source_sha256": {
+    "outputs/main/analysis/2026-10-03T051134.770522_0000_4a1b7c43/curves.json": "420131141d3f94629b93cc79d5424263e21efbf8b0cee44838aea19d7971c30c"
+  }
+}

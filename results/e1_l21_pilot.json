@@ -1,0 +1,101 @@
+{
+  "source": [
+    "outputs/analysis/e1_twin_context_gate_20261005/l21_pilot_a351909f.tar.gz",
+    "docs/E1_L21_SMALL_PILOT_RESULTS_2026-10-05.md"
+  ],
+  "report": "docs/E1_L21_SMALL_PILOT_RESULTS_2026-10-05.md",
+  "run_id": "a351909f6f394034b5402398282a9f0c",
+  "note": "第21层decode原幅度；单情境、五题、seed0。区间仅覆盖五题；随机仅与full同范数。full低极任务损失14分超限，正式E1未通过。",
+  "formal_e0_pass": false,
+  "formal_e1_pass": false,
+  "data": [
+    {
+      "pole": "high",
+      "format": "full",
+      "mismatch_minus_match": {
+        "mean": 7.0,
+        "ci_low": 2.0,
+        "ci_high": 12.0
+      },
+      "random_minus_match": {
+        "mean": 10.25,
+        "ci_low": 3.5,
+        "ci_high": 17.75
+      }
+    },
+    {
+      "pole": "high",
+      "format": "五维",
+      "mismatch_minus_match": {
+        "mean": 4.0,
+        "ci_low": -2.0,
+        "ci_high": 10.0
+      },
+      "random_minus_match": {
+        "mean": 10.25,
+        "ci_low": -0.25,
+        "ci_high": 20.0
+      }
+    },
+    {
+      "pole": "high",
+      "format": "纯反馈",
+      "mismatch_minus_match": {
+        "mean": 2.5,
+        "ci_low": 0.0,
+        "ci_high": 5.5
+      },
+      "random_minus_match": {
+        "mean": 2.0,
+        "ci_low": -1.0,
+        "ci_high": 4.0
+      }
+    },
+    {
+      "pole": "low",
+      "format": "full",
+      "mismatch_minus_match": {
+        "mean": 2.5,
+        "ci_low": -1.5,
+        "ci_high": 6.5
+      },
+      "random_minus_match": {
+        "mean": 9.5,
+        "ci_low": 3.75,
+        "ci_high": 16.75
+      }
+    },
+    {
+      "pole": "low",
+      "format": "五维",
+      "mismatch_minus_match": {
+        "mean": 5.0,
+        "ci_low": -3.0,
+        "ci_high": 14.5
+      },
+      "random_minus_match": {
+        "mean": 8.25,
+        "ci_low": -2.5,
+        "ci_high": 18.0
+      }
+    },
+    {
+      "pole": "low",
+      "format": "纯反馈",
+      "mismatch_minus_match": {
+        "mean": 5.0,
+        "ci_low": 1.0,
+        "ci_high": 9.5
+      },
+      "random_minus_match": {
+        "mean": 1.25,
+        "ci_low": -10.0,
+        "ci_high": 13.0
+      }
+    }
+  ],
+  "source_sha256": {
+    "outputs/analysis/e1_twin_context_gate_20261005/l21_pilot_a351909f.tar.gz": "e61a484d3d60b7caa1559b4532ff170691e2c6a82f21c773fe02ebea6a2b5abc",
+    "docs/E1_L21_SMALL_PILOT_RESULTS_2026-10-05.md": "d45cb26f2c2e95d0edbeb4ab03a173b4da2c9a8f5d6c44368c6fc5742c2f506c"
+  }
+}
